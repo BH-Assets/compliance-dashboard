@@ -50,9 +50,10 @@
   .vtype{font-size:12px;color:#5b6472}
   .vright{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;color:#8a92a1}
   .vsub{font-size:11.5px;color:#8a92a1;margin-top:2px}
-  .vcov{margin-top:8px;display:grid;grid-template-columns:repeat(7,minmax(70px,1fr));gap:7px 10px;align-items:center}
-  .mini{font-size:11.5px;color:#40485a;display:flex;align-items:center;gap:4px;white-space:nowrap}
-  .mini b{color:#7a828f;font-weight:600}
+  .vcov{margin-top:8px;display:grid;grid-template-columns:repeat(7,minmax(72px,1fr));gap:9px 10px;align-items:start}
+  .mini{font-size:11px;color:#40485a;display:flex;flex-direction:column;align-items:flex-start;gap:2px;white-space:nowrap}
+  .mlabel{color:#7a828f;font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.02em}
+  .mdate{color:#8a92a1;font-size:10px}
   .cpill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:bold}
   .cpill.g{background:#C6EFCE;color:#006100}.cpill.y{background:#FFEB9C;color:#9C6500}.cpill.r{background:#FFC7CE;color:#9C0006}.cpill.muted{background:#eef1f6;color:#8a92a1}
   .vnotes{margin-top:7px;font-size:11.5px;line-height:1.55;color:#40485a;border-top:1px solid #f0f2f6;padding-top:6px}
@@ -186,24 +187,25 @@ function render(){
     if(/upload|obtain|Missing|Expired|not on file|not in Billy|no Alabama match|not found|W-9 not/i.test(seg)) return '<span style="color:#b3261e">'+seg+'</span>';
     return seg;
   }).join(' &middot; ');
-  function covChip(label,v,extra){
+  function covChip(label,v,exp,extra){
     let cell;
     if(v==='n/a') cell='<span class="cpill muted">n/a</span>';
     else if(v==='waived') cell='<span class="cpill muted">waived</span>';
     else if(v==='missing'||v==='expired') cell='<span class="cpill r">&lt;0</span>';
     else if(v===''||v==null) cell='<span class="cpill muted">&mdash;</span>';
     else { const d=Number(v); if(isNaN(d)) cell='<span class="cpill muted">&mdash;</span>'; else if(d<0) cell='<span class="cpill r">&lt;0</span>'; else cell='<span class="cpill '+(d<=THRESHOLD?'y':'g')+'">'+d+'</span>'; }
-    return '<span class="mini"><b>'+label+'</b>'+cell+(extra?(' '+extra):'')+'</span>';
+    const dstr=(exp && v!=='waived' && v!=='n/a')?'<span class="mdate">'+exp+'</span>':'';
+    return '<span class="mini"><span class="mlabel">'+label+(extra?(' '+extra):'')+'</span>'+cell+dstr+'</span>';
   }
   const okChip = v => '<span class="cpill '+(v==='Yes'?'g':'r')+'">'+v+'</span>';
   const vcard = r => {
     const cls = r.status==='Compliant'?'g':(r.status==='Expiring Soon'?'y':'r');
     const alTag = r.gcl_on_alabama==='Yes'?'<span class="cpill g" style="font-size:9px">✓AL</span>':'';
     const cov = [
-      r.gcl_required==='Yes'?covChip('GCL',r.gcl_days,alTag):covChip('GCL','n/a'),
-      covChip('WC',r.wc_days), covChip('UL/EL',r.ulel_days), covChip('GL',r.cgl_days), covChip('Auto',r.auto_days),
-      r.prof_required==='Yes'?covChip('Prof',r.prof_days):covChip('Prof','n/a'),
-      '<span class="mini"><b>W-9</b>'+okChip(r.w9_on_file)+'</span>'
+      r.gcl_required==='Yes'?covChip('GCL',r.gcl_days,(r.gcl_exp_alabama||r.gcl_exp_billy||''),alTag):covChip('GCL','n/a',''),
+      covChip('WC',r.wc_days,r.wc_exp), covChip('UL/EL',r.ulel_days,r.ulel_exp), covChip('GL',r.cgl_days,r.cgl_exp), covChip('Auto',r.auto_days,r.auto_exp),
+      r.prof_required==='Yes'?covChip('Prof',r.prof_days,r.prof_exp):covChip('Prof','n/a',''),
+      '<span class="mini"><span class="mlabel">W-9</span>'+okChip(r.w9_on_file)+'</span>'
     ].join('');
     return '<div class="vcard '+cls+'">'
       +'<div class="vhead"><span class="vname">'+(r.vendor||'')+'</span><span class="vtype">'+typeLabel(r)+'</span>'
