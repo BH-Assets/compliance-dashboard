@@ -37,6 +37,10 @@
   .flags{font-size:11px;color:#5b6472;margin-top:3px}
   .empty{color:#5b6472;font-style:italic;padding:10px 0}
   .loading{padding:40px;text-align:center;color:#5b6472}
+  .legend{background:#fff;border:1px solid #e3e8f0;border-radius:10px;padding:11px 14px;margin-bottom:16px;font-size:12.5px;line-height:2;color:#40485a}
+  .legend b{color:#1F3864}
+  .legend .pill{margin:0 2px}
+  .legend .grp{display:inline-block;margin-right:18px;white-space:nowrap}
   footer{margin-top:26px;font-size:11.5px;color:#8a92a1;border-top:1px solid #e3e8f0;padding-top:12px;line-height:1.5}
 </style>
   <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.7.1/lib/msal-browser.min.js"></script>
@@ -103,18 +107,32 @@ async function load(){
 function buildUI(){
   const projects=[...new Set(ROWS.map(r=>r.project))].sort();
   document.getElementById('content').innerHTML=`
+    <div class="legend">
+      <span class="grp"><b>dte</b> = days to expiration</span>
+      <span class="grp"><span class="pill g">30+</span> current</span>
+      <span class="grp"><span class="pill y">1&ndash;30</span> expiring soon</span>
+      <span class="grp"><span class="pill r">&lt;0</span> expired</span>
+      <span class="grp"><span class="muted">waived</span> exempt in Billy</span>
+      <span class="grp"><span class="pill b">none</span> not required / blank</span>
+      <br>
+      <span class="grp"><b>Status:</b> <span class="pill g">Compliant</span> <span class="pill y">Expiring Soon</span> <span class="pill r">Non-Compliant</span></span>
+      <span class="grp"><b>On-Site / Pay:</b> <span class="pill g">Yes</span> <span class="pill r">No</span></span>
+      <span class="grp"><b>Billy:</b> vendor's own compliance in Billy; <span class="pill y">&ne;</span> = differs from ours, review</span>
+      <br>
+      <span class="grp">GCL required for subs with a Procore commitment &ge; $100k, verified on Alabama. W-9 required for all vendors (needed to pay).</span>
+    </div>
     <div class="controls">
       <label>Project view:</label>
       <select id="proj"><option value="ALL">All projects (PD view)</option>${projects.map(p=>`<option>${p}</option>`).join('')}</select>
       <label style="margin-left:8px">Show:</label>
-      <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="pay">Can't be paid</option><option value="gap">Data gaps</option><option value="mismatch">Billy mismatch</option></select>
+      <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="pay">Can't be paid</option><option value="addbilly">Add to Billy</option><option value="mismatch">Billy mismatch</option></select>
       <span style="font-size:12px;color:#8a92a1">(tip: click a card to filter)</span>
     </div>
     <div class="cards" id="cards"></div>
     <div class="section-title">Non-compliant &mdash; cannot be paid or on site</div><div id="nc"></div>
     <div class="section-title">Compliance detail</div>
     <div class="tablescroll"><table id="tbl"></table></div>
-    <div class="section-title">Data gaps &mdash; missing documentation to verify</div><div id="gap"></div>`;
+    <div class="section-title">Data validation &mdash; needs to be added to Billy (from Procore / Alabama)</div><div id="valid"></div>`;
   document.getElementById('proj').addEventListener('change',render);
   document.getElementById('filt').addEventListener('change',render);
   document.getElementById('foot').innerHTML="Source of truth: Billy (active projects &amp; contracts, per-coverage compliance incl. waivers). Coverages WC / UL-EL / CGL / Auto (+ Professional Liability where required). GCL &amp; W-9 tracked at the vendor/directory level; GCL required for subcontractors with a Procore commitment ≥ $100k and verified against Alabama GenConBd. W-9 required for payment. Billy column = Billy's authoritative is_compliant. Source file: SharePoint /sites/Resources/Compliance Dashboard/compliance_data.json.";
@@ -123,25 +141,26 @@ function buildUI(){
 function render(){
   const proj=document.getElementById('proj').value, filt=document.getElementById('filt').value;
   let rows = proj==='ALL' ? ROWS : ROWS.filter(r=>r.project===proj);
-  const c={ok:0,soon:0,bad:0,gap:0,pay:0,mm:0};
-  rows.forEach(r=>{const s=r.status; if(s==='Compliant')c.ok++;else if(s==='Expiring Soon')c.soon++;else if(s==='Non-Compliant')c.bad++;else c.gap++; if(r.payment_ok==='No')c.pay++; if(r.billy_mismatch==='Yes')c.mm++;});
+  const needsBilly = r => r.w9_on_file==='No' || r.gcl_missing_billy==='Yes';
+  const c={ok:0,soon:0,bad:0,add:0,pay:0,mm:0};
+  rows.forEach(r=>{const s=r.status; if(s==='Compliant')c.ok++;else if(s==='Expiring Soon')c.soon++;else if(s==='Non-Compliant')c.bad++; if(r.payment_ok==='No')c.pay++; if(r.billy_mismatch==='Yes')c.mm++; if(needsBilly(r))c.add++;});
   const card=(cls,n,label,f)=>`<div class="card ${cls}" style="cursor:pointer" onclick="setFilter('${f}')" title="Click to filter"><div class="n">${n}</div><div class="l">${label}</div></div>`;
   document.getElementById('cards').innerHTML=
     card('total',rows.length,'Vendors','all')+
     card('ok',c.ok,'Compliant','compliant')+
     card('soon',c.soon,'Expiring Soon','soon')+
     card('bad',c.bad,'Non-Compliant','nc')+
-    card('gap',c.gap,'Data Gaps','gap')+
     card('bad',c.pay,"Can't Be Paid",'pay')+
+    card('gap',c.add,'Add to Billy','addbilly')+
     card('soon',c.mm,'Billy Mismatch','mismatch');
   let view=rows;
   if(filt==='nc') view=rows.filter(r=>r.status==='Non-Compliant');
   else if(filt==='pay') view=rows.filter(r=>r.payment_ok==='No');
   else if(filt==='compliant') view=rows.filter(r=>r.status==='Compliant');
-  else if(filt==='gap') view=rows.filter(r=>r.status==='Data Gap');
+  else if(filt==='addbilly') view=rows.filter(needsBilly);
   else if(filt==='soon') view=rows.filter(r=>r.status==='Expiring Soon');
   else if(filt==='mismatch') view=rows.filter(r=>r.billy_mismatch==='Yes');
-  const head=`<tr><th class="l">Vendor</th><th class="l">Project</th><th>Type</th><th>Contract</th><th>GCL req?</th><th>GCL exp</th><th>GCL d</th><th>WC d</th><th>UL/EL d</th><th>CGL d</th><th>Auto d</th><th>W-9</th><th>On-Site</th><th>Pay</th><th>Status</th><th>Billy</th></tr>`;
+  const head=`<tr><th class="l">Vendor</th><th class="l">Project</th><th>Type</th><th>Contract</th><th>GCL req?</th><th>GCL exp</th><th>GCL dte</th><th>WC dte</th><th>UL/EL dte</th><th>CGL dte</th><th>Auto dte</th><th>W-9</th><th>On-Site</th><th>Pay</th><th>Status</th><th>Billy</th></tr>`;
   const gclExp = r => r.gcl_required==='Yes' ? ((r.gcl_exp_alabama||r.gcl_exp_billy||r.gcl_exp_procore||'—') + (r.gcl_stale?' ⚠':'')) : 'n/a';
   const body = view.length ? view.map(r=>`<tr>
     <td class="l"><b>${r.vendor||''}</b>${r.notes?`<div class="flags">${r.notes}</div>`:''}</td>
@@ -159,9 +178,16 @@ function render(){
   document.getElementById('nc').innerHTML=nc.length?nc.map(r=>`<div class="nc-card"><h4>${r.vendor} <span class="nc-proj">— ${r.project} (${r.project_number||''})</span></h4>
     <div class="flags">${r.payment_ok==='No'?'⛔ Cannot be paid':''} ${r.on_site_ok==='No'?'&nbsp;🚫 Cannot be on site':''}</div>
     <ul class="rsn"><li>${(r.notes||'').replace(/;/g,'</li><li>')}</li></ul></div>`).join(''):`<div class="empty">None in view. ✅</div>`;
-  const gap=rows.filter(r=>r.status==='Data Gap');
-  document.getElementById('gap').innerHTML=gap.length?gap.map(r=>`<div class="gap-card"><h4>${r.vendor} <span class="nc-proj">— ${r.project}</span></h4>
-    <ul class="rsn"><li>${(r.notes||'').replace(/;/g,'</li><li>')}</li></ul></div>`).join(''):`<div class="empty">None in view.</div>`;
+  // Data validation — items to add to Billy
+  const w9miss = rows.filter(r=>r.w9_on_file==='No');
+  const gclmiss = rows.filter(r=>r.gcl_missing_billy==='Yes');
+  const li = arr => arr.map(r=>`<li><b>${r.vendor}</b> <span class="nc-proj">— ${r.project} (${r.project_number||''})</span></li>`).join('');
+  const gclli = gclmiss.map(r=>`<li><b>${r.vendor}</b> <span class="nc-proj">— ${r.project} (${r.project_number||''})</span> · ${r.gcl_on_alabama==='Yes'?('on Alabama, exp '+(r.gcl_exp_alabama||'?')+' → <b>upload to Billy</b>'):'<b>not found on Alabama → obtain license + upload</b>'}</li>`).join('');
+  document.getElementById('valid').innerHTML=
+    `<div class="gap-card"><h4>W-9 missing in Billy <span class="nc-proj">(${w9miss.length}) — add from Procore</span></h4>`+
+    (w9miss.length?`<ul class="rsn">${li(w9miss)}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`+
+    `<div class="gap-card"><h4>GCL not on file in Billy <span class="nc-proj">(${gclmiss.length}) — upload from Alabama/website</span></h4>`+
+    (gclmiss.length?`<ul class="rsn">${gclli}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`;
 }
 window.setFilter = function(v){ const el=document.getElementById('filt'); if(el){ el.value=v; render(); el.scrollIntoView({behavior:'smooth',block:'nearest'}); } };
 load();
