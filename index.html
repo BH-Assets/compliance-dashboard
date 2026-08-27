@@ -119,7 +119,6 @@ function buildUI(){
       <br>
       <span class="grp"><b>Status:</b> <span class="pill g">Compliant</span> <span class="pill y">Expiring Soon</span> <span class="pill r">Non-Compliant</span></span>
       <span class="grp"><b>On-Site / Pay:</b> <span class="pill g">Yes</span> <span class="pill r">No</span></span>
-      <span class="grp"><b>Billy:</b> vendor's own compliance in Billy; <span class="pill y">&ne;</span> = differs from ours, review</span>
       <br>
       <span class="grp">GCL required for subs with a Procore commitment &ge; $100k, verified on Alabama. W-9 required for all vendors (needed to pay).</span>
     </div>
@@ -127,7 +126,7 @@ function buildUI(){
       <label>Project view:</label>
       <select id="proj"><option value="ALL">All projects (PD view)</option>${projects.map(p=>`<option>${p}</option>`).join('')}</select>
       <label style="margin-left:8px">Show:</label>
-      <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="pay">Can't be paid</option><option value="addbilly">Add to Billy</option><option value="mismatch">Billy mismatch</option></select>
+      <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="pay">Can't be paid</option><option value="addbilly">Add to Billy</option></select>
       <label style="margin-left:8px">Search vendor:</label>
       <input id="q" type="text" placeholder="type a vendor name…" style="padding:8px 12px;border:1px solid #c7cfdb;border-radius:8px;font-size:14px;min-width:220px">
       <span style="font-size:12px;color:#8a92a1">(tip: click a card to filter)</span>
@@ -146,7 +145,7 @@ function buildUI(){
   let lock=false;
   st.addEventListener('scroll',()=>{ if(lock)return; lock=true; ts.scrollLeft=st.scrollLeft; lock=false; });
   ts.addEventListener('scroll',()=>{ if(lock)return; lock=true; st.scrollLeft=ts.scrollLeft; lock=false; });
-  document.getElementById('foot').innerHTML="Source of truth: Billy (active projects &amp; contracts, per-coverage compliance incl. waivers). Coverages WC / UL-EL / CGL / Auto (+ Professional Liability where required). GCL &amp; W-9 tracked at the vendor/directory level; GCL required for subcontractors with a Procore commitment ≥ $100k and verified against Alabama GenConBd. W-9 required for payment. Billy column = Billy's authoritative is_compliant. Source file: SharePoint /sites/Resources/Compliance Dashboard/compliance_data.json.";
+  document.getElementById('foot').innerHTML="Source of truth: Billy (active projects &amp; contracts, per-coverage compliance incl. waivers). Coverages WC / UL-EL / CGL / Auto (+ Professional Liability where required). GCL &amp; W-9 tracked at the vendor/directory level; GCL required for subcontractors with a Procore commitment ≥ $100k and verified against Alabama GenConBd. W-9 required for payment. Source file: SharePoint /sites/Resources/Compliance Dashboard/compliance_data.json.";
   render();
 }
 function render(){
@@ -154,7 +153,7 @@ function render(){
   let rows = proj==='ALL' ? ROWS : ROWS.filter(r=>r.project===proj);
   const needsBilly = r => r.w9_on_file==='No' || r.gcl_missing_billy==='Yes';
   const c={ok:0,soon:0,bad:0,add:0,pay:0,mm:0};
-  rows.forEach(r=>{const s=r.status; if(s==='Compliant')c.ok++;else if(s==='Expiring Soon')c.soon++;else if(s==='Non-Compliant')c.bad++; if(r.payment_ok==='No')c.pay++; if(r.billy_mismatch==='Yes')c.mm++; if(needsBilly(r))c.add++;});
+  rows.forEach(r=>{const s=r.status; if(s==='Compliant')c.ok++;else if(s==='Expiring Soon')c.soon++;else if(s==='Non-Compliant')c.bad++; if(r.payment_ok==='No')c.pay++; if(needsBilly(r))c.add++;});
   const card=(cls,n,label,f)=>`<div class="card ${cls}" style="cursor:pointer" onclick="setFilter('${f}')" title="Click to filter"><div class="n">${n}</div><div class="l">${label}</div></div>`;
   document.getElementById('cards').innerHTML=
     card('total',rows.length,'Vendors','all')+
@@ -162,18 +161,16 @@ function render(){
     card('soon',c.soon,'Expiring Soon','soon')+
     card('bad',c.bad,'Non-Compliant','nc')+
     card('bad',c.pay,"Can't Be Paid",'pay')+
-    card('gap',c.add,'Add to Billy','addbilly')+
-    card('soon',c.mm,'Billy Mismatch','mismatch');
+    card('gap',c.add,'Add to Billy','addbilly');
   let view=rows;
   if(filt==='nc') view=rows.filter(r=>r.status==='Non-Compliant');
   else if(filt==='pay') view=rows.filter(r=>r.payment_ok==='No');
   else if(filt==='compliant') view=rows.filter(r=>r.status==='Compliant');
   else if(filt==='addbilly') view=rows.filter(needsBilly);
   else if(filt==='soon') view=rows.filter(r=>r.status==='Expiring Soon');
-  else if(filt==='mismatch') view=rows.filter(r=>r.billy_mismatch==='Yes');
   const q=(document.getElementById('q').value||'').trim().toLowerCase();
   if(q) view=view.filter(r=>(r.vendor||'').toLowerCase().includes(q));
-  const head=`<tr><th class="l">Vendor</th><th class="l">Project</th><th>Type</th><th>Contract</th><th>GCL req?</th><th>GCL exp</th><th>GCL dte</th><th>WC dte</th><th>UL/EL dte</th><th>CGL dte</th><th>Auto dte</th><th>W-9</th><th>On-Site</th><th>Pay</th><th>Status</th><th>Billy</th></tr>`;
+  const head=`<tr><th class="l">Vendor</th><th class="l">Project</th><th>Type</th><th>Contract</th><th>GCL req?</th><th>GCL exp</th><th>GCL dte</th><th>WC dte</th><th>UL/EL dte</th><th>GL dte</th><th>Auto dte</th><th>W-9</th><th>On-Site</th><th>Pay</th><th>Status</th></tr>`;
   const gclExp = r => r.gcl_required==='Yes' ? ((r.gcl_exp_alabama||r.gcl_exp_billy||r.gcl_exp_procore||'—') + (r.gcl_stale?' ⚠':'')) : 'n/a';
   const body = view.length ? view.map(r=>`<tr>
     <td class="l"><b>${r.vendor||''}</b>${r.notes?`<div class="flags">${r.notes}</div>`:''}</td>
@@ -184,8 +181,7 @@ function render(){
     ${r.gcl_required==='Yes'?dcell(num(r.gcl_days)):'<td><span class="muted">n/a</span></td>'}
     ${dcell(num(r.wc_days))}${dcell(num(r.ulel_days))}${dcell(num(r.cgl_days))}${dcell(num(r.auto_days))}
     <td>${okPill(r.w9_on_file)}</td><td>${okPill(r.on_site_ok)}</td><td>${okPill(r.payment_ok)}</td>
-    <td>${stPill(r.status)}</td>
-    <td>${r.billy_is_compliant?('<span class="pill '+(r.billy_is_compliant==='Yes'?'g':'r')+'">'+r.billy_is_compliant+'</span>'+(r.billy_mismatch==='Yes'?' <span class="pill y">≠</span>':'')):'<span class="muted">—</span>'}</td></tr>`).join('') : `<tr><td colspan="16" class="empty">No vendors match this view.</td></tr>`;
+    <td>${stPill(r.status)}</td></tr>`).join('') : `<tr><td colspan="15" class="empty">No vendors match this view.</td></tr>`;
   document.getElementById('tbl').innerHTML=head+body;
   document.getElementById('scrolltopinner').style.width=document.getElementById('tbl').scrollWidth+'px';
   document.getElementById('ncwrap').style.display=(filt==='nc'||filt==='pay')?'':'none';
