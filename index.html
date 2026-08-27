@@ -129,9 +129,9 @@ function buildUI(){
       <span style="font-size:12px;color:#8a92a1">(tip: click a card to filter)</span>
     </div>
     <div class="cards" id="cards"></div>
-    <div class="section-title">Non-compliant &mdash; cannot be paid or on site</div><div id="nc"></div>
     <div class="section-title">Compliance detail</div>
     <div class="tablescroll"><table id="tbl"></table></div>
+    <div id="ncwrap"><div class="section-title">Non-compliant &mdash; cannot be paid or on site</div><div id="nc"></div></div>
     <div class="section-title">Data validation &mdash; needs to be added to Billy (from Procore / Alabama)</div><div id="valid"></div>`;
   document.getElementById('proj').addEventListener('change',render);
   document.getElementById('filt').addEventListener('change',render);
@@ -174,7 +174,8 @@ function render(){
     <td>${stPill(r.status)}</td>
     <td>${r.billy_is_compliant?('<span class="pill '+(r.billy_is_compliant==='Yes'?'g':'r')+'">'+r.billy_is_compliant+'</span>'+(r.billy_mismatch==='Yes'?' <span class="pill y">≠</span>':'')):'<span class="muted">—</span>'}</td></tr>`).join('') : `<tr><td colspan="16" class="empty">No vendors match this view.</td></tr>`;
   document.getElementById('tbl').innerHTML=head+body;
-  const nc=rows.filter(r=>r.status==='Non-Compliant');
+  document.getElementById('ncwrap').style.display=(filt==='nc'||filt==='pay')?'':'none';
+  const nc=(filt==='pay')?rows.filter(r=>r.payment_ok==='No'):rows.filter(r=>r.status==='Non-Compliant');
   document.getElementById('nc').innerHTML=nc.length?nc.map(r=>`<div class="nc-card"><h4>${r.vendor} <span class="nc-proj">— ${r.project} (${r.project_number||''})</span></h4>
     <div class="flags">${r.payment_ok==='No'?'⛔ Cannot be paid':''} ${r.on_site_ok==='No'?'&nbsp;🚫 Cannot be on site':''}</div>
     <ul class="rsn"><li>${(r.notes||'').replace(/;/g,'</li><li>')}</li></ul></div>`).join(''):`<div class="empty">None in view. ✅</div>`;
