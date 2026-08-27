@@ -79,11 +79,13 @@ async function getToken(){
   catch (e) { await msalApp.acquireTokenRedirect({ scopes: SCOPES }); return null; }
 }
 
-function num(v){ return (v===''||v===null||v===undefined) ? null : (v==='waived'?'waived':Number(v)); }
-function dcell(days){
-  if(days==='waived') return '<td><span class="muted">waived</span></td>';
-  if(days===null||days===undefined||days==='') return '<td><span class="pill b">none</span></td>';
-  const d=Number(days); const c=d<0?'r':(d<=THRESHOLD?'y':'g');
+function dcell(v){
+  if(v==='waived') return '<td><span class="muted">waived</span></td>';
+  if(v==='missing'||v==='expired') return '<td><span class="pill r">&lt;0</span></td>';  // expired / no current coverage
+  if(v===null||v===undefined||v==='') return '<td><span class="muted">&mdash;</span></td>';  // not required
+  const d=Number(v); if(isNaN(d)) return '<td><span class="muted">&mdash;</span></td>';
+  if(d<0) return '<td><span class="pill r">&lt;0</span></td>';
+  const c=d<=THRESHOLD?'y':'g';
   return `<td><span class="pill ${c}">${d}</span></td>`;
 }
 const stPill=s=>`<span class="pill ${s==='Compliant'?'g':s==='Expiring Soon'?'y':s==='Data Gap'?'b':'r'}">${s}</span>`;
@@ -115,7 +117,8 @@ function buildUI(){
       <span class="grp"><span class="pill y">1&ndash;30</span> expiring soon</span>
       <span class="grp"><span class="pill r">&lt;0</span> expired</span>
       <span class="grp"><span class="muted">waived</span> exempt in Billy</span>
-      <span class="grp"><span class="pill b">none</span> not required / blank</span>
+      <span class="grp"><span class="pill r">&lt;0</span> expired / no current coverage on file</span>
+      <span class="grp"><span class="muted">&mdash;</span> not required for this vendor</span>
       <br>
       <span class="grp"><b>Status:</b> <span class="pill g">Compliant</span> <span class="pill y">Expiring Soon</span> <span class="pill r">Non-Compliant</span></span>
       <span class="grp"><b>On-Site / Pay:</b> <span class="pill g">Yes</span> <span class="pill r">No</span></span>
@@ -178,8 +181,8 @@ function render(){
     <td>${r.vendor_type||''}</td><td>$${Number(r.contract_value||0).toLocaleString()}</td>
     <td>${r.gcl_required==='Yes'?'<span class="pill y">Yes</span>':'<span class="muted">No</span>'}</td>
     <td style="font-size:11px">${gclExp(r)}</td>
-    ${r.gcl_required==='Yes'?dcell(num(r.gcl_days)):'<td><span class="muted">n/a</span></td>'}
-    ${dcell(num(r.wc_days))}${dcell(num(r.ulel_days))}${dcell(num(r.cgl_days))}${dcell(num(r.auto_days))}
+    ${r.gcl_required==='Yes'?dcell(r.gcl_days):'<td><span class="muted">n/a</span></td>'}
+    ${dcell(r.wc_days)}${dcell(r.ulel_days)}${dcell(r.cgl_days)}${dcell(r.auto_days)}
     <td>${okPill(r.w9_on_file)}</td><td>${okPill(r.on_site_ok)}</td><td>${okPill(r.payment_ok)}</td>
     <td>${stPill(r.status)}</td></tr>`).join('') : `<tr><td colspan="15" class="empty">No vendors match this view.</td></tr>`;
   document.getElementById('tbl').innerHTML=head+body;
