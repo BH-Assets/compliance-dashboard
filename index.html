@@ -43,6 +43,19 @@
   .legend b{color:#1F3864}
   .legend .pill{margin:0 2px}
   .legend .grp{display:inline-block;margin-right:18px;white-space:nowrap}
+  .vcard{background:#fff;border:1px solid #e3e8f0;border-left:6px solid #1a4fb0;border-radius:10px;padding:11px 15px;margin-bottom:11px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .vcard.g{border-left-color:#1a7f37}.vcard.y{border-left-color:#c99a00}.vcard.r{border-left-color:#b3261e}
+  .vhead{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .vname{font-weight:bold;font-size:14.5px;color:#1f2733}
+  .vtype{font-size:12px;color:#5b6472}
+  .vright{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;color:#8a92a1}
+  .vsub{font-size:11.5px;color:#8a92a1;margin-top:2px}
+  .vcov{margin-top:8px;display:grid;grid-template-columns:repeat(7,minmax(70px,1fr));gap:7px 10px;align-items:center}
+  .mini{font-size:11.5px;color:#40485a;display:flex;align-items:center;gap:4px;white-space:nowrap}
+  .mini b{color:#7a828f;font-weight:600}
+  .cpill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:bold}
+  .cpill.g{background:#C6EFCE;color:#006100}.cpill.y{background:#FFEB9C;color:#9C6500}.cpill.r{background:#FFC7CE;color:#9C0006}.cpill.muted{background:#eef1f6;color:#8a92a1}
+  .vnotes{margin-top:7px;font-size:11.5px;line-height:1.55;color:#40485a;border-top:1px solid #f0f2f6;padding-top:6px}
   footer{margin-top:26px;font-size:11.5px;color:#8a92a1;border-top:1px solid #e3e8f0;padding-top:12px;line-height:1.5}
 </style>
   <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.7.1/lib/msal-browser.min.js"></script>
@@ -122,75 +135,85 @@ function buildUI(){
       <span class="grp"><b>Status:</b> <span class="pill g">Compliant</span> <span class="pill y">Expiring Soon</span> <span class="pill r">Non-Compliant</span></span>
       <span class="grp"><b>On-Site / Pay:</b> <span class="pill g">Yes</span> <span class="pill r">No</span></span>
       <br>
-      <span class="grp">GC License required for subs with a Procore commitment &ge; $100k, verified on Alabama. W-9 required for all vendors (needed to pay).</span>
+      <span class="grp">GC License required for subs with a Procore commitment &ge; $100k; <span class="pill g" style="font-size:9px">&check;AL</span> = verified on the Alabama GC website. W-9 tracked for all vendors (note only &mdash; does not block). On-Site/Pay is a single verdict: Non-Compliant = cannot be on site or paid.</span>
     </div>
     <div class="controls">
       <label>Project view:</label>
       <select id="proj"><option value="ALL">All projects (PD view)</option>${projects.map(p=>`<option>${p}</option>`).join('')}</select>
-      <label style="margin-left:8px">Show:</label>
-      <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="pay">Can't be paid</option><option value="addbilly">Add to Billy</option></select>
+      <label style="margin-left:8px">Filter:</label>
+      <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="docs">Documents needed</option><option value="nogcl">Missing GC License</option><option value="now9">Missing W-9</option><option value="noins">Missing insurance doc</option></select>
       <label style="margin-left:8px">Search vendor:</label>
       <input id="q" type="text" placeholder="type a vendor name…" style="padding:8px 12px;border:1px solid #c7cfdb;border-radius:8px;font-size:14px;min-width:220px">
       <span style="font-size:12px;color:#8a92a1">(tip: click a card to filter)</span>
     </div>
     <div class="cards" id="cards"></div>
-    <div class="section-title">Compliance detail</div>
-    <div class="scrolltop" id="scrolltop"><div id="scrolltopinner"></div></div>
-    <div class="tablescroll" id="tblscroll"><table id="tbl"></table></div>
-    <div id="ncwrap"><div class="section-title">Non-compliant &mdash; cannot be paid or on site</div><div id="nc"></div></div>
-    <div class="section-title">Data validation &mdash; needs to be added to Billy (from Procore / Alabama)</div><div id="valid"></div>`;
+    <div class="section-title">Vendors</div>
+    <div id="list"></div>
+    <div class="section-title">Documents to add to Billy (from Procore / Alabama)</div><div id="valid"></div>`;
   document.getElementById('proj').addEventListener('change',render);
   document.getElementById('filt').addEventListener('change',render);
   document.getElementById('q').addEventListener('input',render);
-  // sync the top scrollbar with the table's own scrollbar
-  const st=document.getElementById('scrolltop'), ts=document.getElementById('tblscroll');
-  let lock=false;
-  st.addEventListener('scroll',()=>{ if(lock)return; lock=true; ts.scrollLeft=st.scrollLeft; lock=false; });
-  ts.addEventListener('scroll',()=>{ if(lock)return; lock=true; st.scrollLeft=ts.scrollLeft; lock=false; });
-  document.getElementById('foot').innerHTML="Source of truth: Billy (active projects &amp; contracts, per-coverage compliance incl. waivers). Coverages WC / UL-EL / CGL / Auto (+ Professional Liability where required). GCL &amp; W-9 tracked at the vendor/directory level; GCL required for subcontractors with a Procore commitment ≥ $100k and verified against Alabama GenConBd. W-9 required for payment. Source file: SharePoint /sites/Resources/Compliance Dashboard/compliance_data.json.";
+  document.getElementById('foot').innerHTML="Source of truth: Billy (active projects &amp; contracts, per-coverage compliance incl. waivers). Coverages WC / UL-EL / CGL / Auto (+ Professional Liability where required). GCL &amp; W-9 tracked at the vendor/directory level; GCL required for subcontractors with a Procore commitment ≥ $100k and verified against Alabama GenConBd. W-9 tracked for all vendors (note only, does not block). On-Site and Pay are one verdict. Source file: SharePoint /sites/Resources/Compliance Dashboard/compliance_data.json.";
   render();
 }
 function render(){
   const proj=document.getElementById('proj').value, filt=document.getElementById('filt').value;
   let rows = proj==='ALL' ? ROWS : ROWS.filter(r=>r.project===proj);
-  const needsBilly = r => r.w9_on_file==='No' || r.gcl_missing_billy==='Yes';
-  const c={ok:0,soon:0,bad:0,add:0,pay:0,mm:0};
-  rows.forEach(r=>{const s=r.status; if(s==='Compliant')c.ok++;else if(s==='Expiring Soon')c.soon++;else if(s==='Non-Compliant')c.bad++; if(r.payment_ok==='No')c.pay++; if(needsBilly(r))c.add++;});
+  const covBad = r => ['wc_days','ulel_days','cgl_days','auto_days','prof_days'].some(k=>{const v=r[k]; return v==='missing'||(v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0);});
+  const docsNeeded = r => r.w9_on_file==='No' || r.gcl_missing_billy==='Yes' || covBad(r);
+  const c={ok:0,soon:0,bad:0,docs:0};
+  rows.forEach(r=>{const s=r.status; if(s==='Compliant')c.ok++;else if(s==='Expiring Soon')c.soon++;else if(s==='Non-Compliant')c.bad++; if(docsNeeded(r))c.docs++;});
   const card=(cls,n,label,f)=>`<div class="card ${cls}" style="cursor:pointer" onclick="setFilter('${f}')" title="Click to filter"><div class="n">${n}</div><div class="l">${label}</div></div>`;
   document.getElementById('cards').innerHTML=
     card('total',rows.length,'Vendors','all')+
     card('ok',c.ok,'Compliant','compliant')+
     card('soon',c.soon,'Expiring Soon','soon')+
     card('bad',c.bad,'Non-Compliant','nc')+
-    card('bad',c.pay,"Can't Be Paid",'pay')+
-    card('gap',c.add,'Add to Billy','addbilly');
+    card('gap',c.docs,'Documents Needed','docs');
   let view=rows;
   if(filt==='nc') view=rows.filter(r=>r.status==='Non-Compliant');
-  else if(filt==='pay') view=rows.filter(r=>r.payment_ok==='No');
   else if(filt==='compliant') view=rows.filter(r=>r.status==='Compliant');
-  else if(filt==='addbilly') view=rows.filter(needsBilly);
+  else if(filt==='docs') view=rows.filter(docsNeeded);
   else if(filt==='soon') view=rows.filter(r=>r.status==='Expiring Soon');
+  else if(filt==='nogcl') view=rows.filter(r=>r.gcl_required==='Yes' && (r.gcl_days==='missing' || (r.gcl_days!==''&&r.gcl_days!=='waived'&&!isNaN(Number(r.gcl_days))&&Number(r.gcl_days)<0)));
+  else if(filt==='now9') view=rows.filter(r=>r.w9_on_file==='No');
+  else if(filt==='noins') view=rows.filter(r=>['wc_days','ulel_days','cgl_days','auto_days','prof_days'].some(k=>{const v=r[k]; return v==='missing'||(v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0);}));
   const q=(document.getElementById('q').value||'').trim().toLowerCase();
   if(q) view=view.filter(r=>(r.vendor||'').toLowerCase().includes(q));
-  const head=`<tr><th class="l">Vendor</th><th class="l">Project</th><th>Type</th><th>Contract</th><th>GCL req?</th><th>GCL exp</th><th>GCL dte</th><th>WC dte</th><th>UL/EL dte</th><th>GL dte</th><th>Auto dte</th><th>W-9</th><th>On-Site</th><th>Pay</th><th>Status</th></tr>`;
-  const gclExp = r => r.gcl_required==='Yes' ? ((r.gcl_exp_alabama||r.gcl_exp_billy||r.gcl_exp_procore||'—') + (r.gcl_stale?' ⚠':'')) : 'n/a';
-  const body = view.length ? view.map(r=>`<tr>
-    <td class="l"><b>${r.vendor||''}</b>${r.notes?`<div class="flags">${r.notes}</div>`:''}</td>
-    <td class="l">${r.project||''}<div class="flags">${r.project_number||''} · ${r.commitment||''}</div></td>
-    <td>${r.vendor_type||''}</td><td>$${Number(r.contract_value||0).toLocaleString()}</td>
-    <td>${r.gcl_required==='Yes'?'<span class="pill y">Yes</span>':'<span class="muted">No</span>'}</td>
-    <td style="font-size:11px">${gclExp(r)}</td>
-    ${r.gcl_required==='Yes'?dcell(r.gcl_days):'<td><span class="muted">n/a</span></td>'}
-    ${dcell(r.wc_days)}${dcell(r.ulel_days)}${dcell(r.cgl_days)}${dcell(r.auto_days)}
-    <td>${okPill(r.w9_on_file)}</td><td>${okPill(r.on_site_ok)}</td><td>${okPill(r.payment_ok)}</td>
-    <td>${stPill(r.status)}</td></tr>`).join('') : `<tr><td colspan="15" class="empty">No vendors match this view.</td></tr>`;
-  document.getElementById('tbl').innerHTML=head+body;
-  document.getElementById('scrolltopinner').style.width=document.getElementById('tbl').scrollWidth+'px';
-  document.getElementById('ncwrap').style.display=(filt==='nc'||filt==='pay')?'':'none';
-  const nc=(filt==='pay')?rows.filter(r=>r.payment_ok==='No'):rows.filter(r=>r.status==='Non-Compliant');
-  document.getElementById('nc').innerHTML=nc.length?nc.map(r=>`<div class="nc-card"><h4>${r.vendor} <span class="nc-proj">— ${r.project} (${r.project_number||''})</span></h4>
-    <div class="flags">${r.payment_ok==='No'?'⛔ Cannot be paid':''} ${r.on_site_ok==='No'?'&nbsp;🚫 Cannot be on site':''}</div>
-    <ul class="rsn"><li>${(r.notes||'').replace(/;/g,'</li><li>')}</li></ul></div>`).join(''):`<div class="empty">None in view. ✅</div>`;
+  const typeLabel = r => (r.vendor_type==='Supplier' && r.site_type) ? ('Supplier ('+(r.site_type==='Third Party'?'3rd Party':r.site_type)+')') : (r.vendor_type||'');
+  const noteHtml = n => (n||'').split('; ').map(seg=>{
+    if(/verified on Alabama/i.test(seg)) return '<span style="color:#1a7f37">'+seg+'</span>';
+    if(/upload|obtain|Missing|Expired|not on file|not in Billy|no Alabama match|not found|W-9 not/i.test(seg)) return '<span style="color:#b3261e">'+seg+'</span>';
+    return seg;
+  }).join(' &middot; ');
+  function covChip(label,v,extra){
+    let cell;
+    if(v==='n/a') cell='<span class="cpill muted">n/a</span>';
+    else if(v==='waived') cell='<span class="cpill muted">waived</span>';
+    else if(v==='missing'||v==='expired') cell='<span class="cpill r">&lt;0</span>';
+    else if(v===''||v==null) cell='<span class="cpill muted">&mdash;</span>';
+    else { const d=Number(v); if(isNaN(d)) cell='<span class="cpill muted">&mdash;</span>'; else if(d<0) cell='<span class="cpill r">&lt;0</span>'; else cell='<span class="cpill '+(d<=THRESHOLD?'y':'g')+'">'+d+'</span>'; }
+    return '<span class="mini"><b>'+label+'</b>'+cell+(extra?(' '+extra):'')+'</span>';
+  }
+  const okChip = v => '<span class="cpill '+(v==='Yes'?'g':'r')+'">'+v+'</span>';
+  const vcard = r => {
+    const cls = r.status==='Compliant'?'g':(r.status==='Expiring Soon'?'y':'r');
+    const alTag = r.gcl_on_alabama==='Yes'?'<span class="cpill g" style="font-size:9px">✓AL</span>':'';
+    const cov = [
+      r.gcl_required==='Yes'?covChip('GCL',r.gcl_days,alTag):covChip('GCL','n/a'),
+      covChip('WC',r.wc_days), covChip('UL/EL',r.ulel_days), covChip('GL',r.cgl_days), covChip('Auto',r.auto_days),
+      r.prof_required==='Yes'?covChip('Prof',r.prof_days):covChip('Prof','n/a'),
+      '<span class="mini"><b>W-9</b>'+okChip(r.w9_on_file)+'</span>'
+    ].join('');
+    return '<div class="vcard '+cls+'">'
+      +'<div class="vhead"><span class="vname">'+(r.vendor||'')+'</span><span class="vtype">'+typeLabel(r)+'</span>'
+      +'<span class="vright">On-Site/Pay '+okChip(r.on_site_ok)+' '+stPill(r.status)+'</span></div>'
+      +'<div class="vsub">'+(r.project||'')+' &middot; '+(r.project_number||'')+' &middot; '+(r.commitment||'')+' &middot; $'+Number(r.contract_value||0).toLocaleString()+'</div>'
+      +'<div class="vcov">'+cov+'</div>'
+      +(r.notes?'<div class="vnotes">'+noteHtml(r.notes)+'</div>':'')
+      +'</div>';
+  };
+  document.getElementById('list').innerHTML = view.length ? view.map(vcard).join('') : '<div class="empty">No vendors match this view.</div>';
   // Data validation — items to add to Billy
   const w9miss = rows.filter(r=>r.w9_on_file==='No');
   const gclmiss = rows.filter(r=>r.gcl_missing_billy==='Yes');
