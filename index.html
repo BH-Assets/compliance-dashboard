@@ -48,6 +48,7 @@
   .vhead{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
   .vname{font-weight:bold;font-size:14.5px;color:#1f2733}
   .vtype{font-size:12px;color:#5b6472}
+  .gtag{background:#DDEBF7;color:#1F3864;border:1px solid #b7ccf5;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:bold}
   .vright{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;color:#8a92a1}
   .vsub{font-size:11.5px;color:#8a92a1;margin-top:2px}
   .vcov{margin-top:8px;display:grid;grid-template-columns:repeat(7,minmax(72px,1fr));gap:9px 10px;align-items:start}
@@ -208,6 +209,7 @@ function render(){
     ].join('');
     return '<div class="vcard '+cls+'">'
       +'<div class="vhead"><span class="vname">'+(r.vendor||'')+'</span><span class="vtype">'+typeLabel(r)+'</span>'
+      +(r.global_coi==='Yes'?'<span class="gtag" title="Global blanket COI: one COI on the company directory; project COI waived">Global COI</span>':'')
       +'<span class="vright">On-Site/Pay '+okChip(r.on_site_ok)+' '+stPill(r.status)+'</span></div>'
       +'<div class="vsub">'+(r.project||'')+' &middot; '+(r.project_number||'')+' &middot; '+(r.commitment||'')+' &middot; $'+Number(r.contract_value||0).toLocaleString()+'</div>'
       +'<div class="vcov">'+cov+'</div>'
