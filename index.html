@@ -47,6 +47,7 @@
   .vcard.g{border-left-color:#1a7f37}.vcard.y{border-left-color:#c99a00}.vcard.r{border-left-color:#b3261e}
   .vhead{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
   .vname{font-weight:bold;font-size:14.5px;color:#1f2733}
+  a.vlink{text-decoration:none}a.vlink:hover{color:#2F5496;text-decoration:underline}
   .vtype{font-size:12px;color:#5b6472}
   .gtag{background:#DDEBF7;color:#1F3864;border:1px solid #b7ccf5;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:bold}
   .vright{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;color:#8a92a1}
@@ -107,6 +108,11 @@ function billyInsuranceDocs(r){
   if(r.billy_project_id && r.billy_contract_id)                                          // project-specific (subs AND POs use /subcontract/)
     return BILLY_DOCS_BASE+'/projects/'+r.billy_project_id+'/subcontract/'+r.billy_contract_id+'/Documents';
   return billyVendorDocs(r);                                                             // missing ids -> safe fallback (company directory)
+}
+function billyVendorLink(r){                                                             // vendor name -> Billy record
+  if(r.global_coi!=='Yes' && r.billy_project_id && r.billy_contract_id)
+    return BILLY_DOCS_BASE+'/projects/'+r.billy_project_id+'/subcontract/'+r.billy_contract_id+'/Coverages';   // project-specific -> project vendor Coverages
+  return r.vendor_id ? (BILLY_DOCS_BASE+'/directory/vendors/'+r.vendor_id+'/Details') : '';                     // global / fallback -> directory Details
 }
 let ROWS = [], GENERATED = '';
 const msalApp = new msal.PublicClientApplication({
@@ -271,7 +277,7 @@ function render(){
       '<span class="mini"><span class="mlabel">W-9</span>'+okChip(r.w9_on_file)+'</span>'
     ].join('');
     return '<div class="vcard '+cls+'">'
-      +'<div class="vhead"><span class="vname">'+(r.vendor||'')+'</span><span class="vtype">'+typeLabel(r)+'</span>'
+      +'<div class="vhead">'+((()=>{ const vl=billyVendorLink(r); const nm=(r.vendor||''); return vl?'<a class="vname vlink" href="'+vl+'" target="_blank" rel="noopener" title="Open in Billy">'+nm+'</a>':'<span class="vname">'+nm+'</span>'; })())+'<span class="vtype">'+typeLabel(r)+'</span>'
       +(r.global_coi==='Yes'?'<span class="gtag" title="Global blanket COI: one COI on the company directory; project COI waived">Global COI</span>':'')
       +'<span class="vright">On-Site/Pay '+okChip(r.on_site_ok)+' '+stPill(r.status)+'</span></div>'
       +'<div class="vsub">'+(r.project||'')+' &middot; '+(r.project_number||'')+' &middot; '+(r.commitment||'')+' &middot; $'+Number(r.contract_value||0).toLocaleString()+'</div>'
@@ -279,16 +285,18 @@ function render(){
       +(r.notes?'<div class="vnotes">'+noteHtml(r.notes)+'</div>':'')
       +((()=>{
         const h=mailtoFor(r);
-        const hasGap = r.status!=='Compliant' || r.w9_on_file==='No' || r.gcl_missing_billy==='Yes';
-        if(!h && !hasGap) return '';
+        const gclGap = (r.gcl_required==='Yes' && (r.gcl_days==='missing' || (r.gcl_days!==''&&r.gcl_days!=='waived'&&!isNaN(Number(r.gcl_days))&&Number(r.gcl_days)<0))) || r.gcl_missing_billy==='Yes';
+        const docGap = r.w9_on_file==='No' || gclGap;   // W-9 / GC License missing
+        const insGap = covBad(r);                        // an actual insurance coverage is expired/missing
+        if(!h && !docGap && !insGap) return '';
         let inner='';
         if(h){ const lbl=r.global_coi==='Yes'?'Request global docs':'Request updates';
           const when = (()=>{ if(!r.last_requested) return 'not requested yet'; const d=new Date(r.last_requested); const n=new Date(); return (d.toDateString()===n.toDateString()) ? 'Documents requested today' : ('last requested '+d.toLocaleDateString()); })();
           inner += '<button class="reqbtn" data-mailto="'+encodeURIComponent(h)+'" data-vid="'+(r.vendor_id||'')+'" data-cid="'+(r.billy_contract_id||'')+'" data-global="'+(r.global_coi==='Yes'?1:0)+'">&#9993; '+lbl+'</button><span class="reqwhen">'+when+'</span>';
         }
         const upV=billyVendorDocs(r), upI=billyInsuranceDocs(r);
-        if(upV) inner += '<a class="upbtn" href="'+upV+'" target="_blank" rel="noopener" title="Opens Billy at this vendor’s directory Documents tab — drag & drop the file there">&#8673; Upload W-9 / GC License</a>';
-        if(upI) inner += '<a class="upbtn" href="'+upI+'" target="_blank" rel="noopener" title="Opens Billy at the '+(r.global_coi==='Yes'?'company directory':'project contract')+' Documents tab — drag & drop the file there">&#8673; Upload insurance docs</a>';
+        if(docGap && upV) inner += '<a class="upbtn" href="'+upV+'" target="_blank" rel="noopener" title="Opens Billy at this vendor’s directory Documents tab — drag & drop the file there">&#8673; Upload W-9 / GC License</a>';
+        if(insGap && upI) inner += '<a class="upbtn" href="'+upI+'" target="_blank" rel="noopener" title="Opens Billy at the '+(r.global_coi==='Yes'?'company directory':'project contract')+' Documents tab — drag & drop the file there">&#8673; Upload insurance docs</a>';
         return '<div class="vact">'+inner+'</div>';
       })())
       +'</div>';
