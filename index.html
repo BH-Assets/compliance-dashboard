@@ -91,7 +91,7 @@
 const MSAL_CLIENT_ID = '4bb1f92c-c0a9-4dd6-97a3-2d8c8c9fe27a';    // Azure SPA app registration (client) ID
 const TENANT = '848aa890-7982-4028-befa-3323d82583ce';           // Bailey Harris tenant
 const SCOPES = ['Files.Read.All','User.Read'];                    // Graph read + identity (for Sync)
-const SYNC_WORKER_URL = 'https://bh-compliance-sync.soft-math-3331.workers.dev/';   // set to your Cloudflare Worker URL to enable the Sync button
+const SYNC_WORKER_URL = '';                                       // set to your Cloudflare Worker URL to enable the Sync button
 const DRIVE_ID = 'b!UgjUeEqLf0e6Z37An3qt5NP_8dR2rQJBoZpkPrOgBP0b4x1AxB_JT5QG_didjvoe';
 const ITEM_ID  = '01DG2CN7YZK66GZHQHD5ALV5QO4M275DKG';
 const THRESHOLD = 30;
@@ -234,8 +234,17 @@ function render(){
     const intro = isGlobal
       ? 'Our records indicate the following global compliance documents have expired or are missing. As a reminder, you carry ONE blanket/global COI that covers all Bailey Harris Construction projects:'
       : 'Our records indicate the following compliance documents are missing or expired for '+r.project+':';
-    const uploadLine = SYNC_WORKER_URL ? '\n\nA secure upload link has been sent to you from our compliance system (Billy Insurance) — you may upload directly there, or reply to this email with the documents.' : '';
-    const body='Dear '+r.vendor+',\n\n'+intro+'\n\n'+items.map(i=>'  • '+i).join('\n')+'\n\nPlease note: copies of the actual policy endorsements are also required to confirm the coverage is in force. A Certificate of Insurance (COI) is informational only and does not by itself prove that coverage exists.'+uploadLine+'\n\nPlease send the updated documentation at your earliest convenience so we can keep your account current for on-site access and payment.\n\nThank you,\nBailey Harris Construction';
+    const uploadLine = '\n\nA secure upload link has been sent to you via our compliance system, Billy (compliance@baileyharris.com). You may upload directly there or reply to this email with the documents.';
+    const faqs=[
+      'Where to find the requirement: Attachment F of your subcontract.',
+      ...(!isGlobal ? ['Sometimes we are looking for an updated W-9 or Contractor’s License. These are company compliance documents, which is a different request than a project-specific COI + endorsement.'] : []),
+      'Even if the COI lists the correct limits, an endorsement may still be missing. Use the link sent from Billy for Insurance to see exactly what is missing and any notes from our reviewer.',
+      'You can forward the link from Billy to your insurance agent and they can upload on your behalf.',
+      'If a waiver is in place, a current waiver may not show on your account until after your documents have been reviewed.',
+      'Additional Questions? Email tiffany.blackmon@baileyharris.com'
+    ];
+    const faqBlock='\n\nFAQs:\n'+faqs.map(f=>'  • '+f).join('\n');
+    const body='Dear '+r.vendor+',\n\n'+intro+'\n\n'+items.map(i=>'  • '+i).join('\n')+'\n\nPlease note: copies of the actual policy endorsements are also required to confirm the coverage is in force. A Certificate of Insurance (COI) is informational only and does not by itself prove that coverage exists.'+uploadLine+'\n\nPlease send the updated documentation at your earliest convenience so we can keep your account current for on-site access and payment.'+faqBlock+'\n\nThank you,\nBailey-Harris Construction';
     return 'mailto:'+encodeURIComponent(r.vendor_email||'')+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
   };
   const vcard = r => {
