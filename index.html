@@ -59,11 +59,16 @@
   .cpill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:bold}
   .cpill.g{background:#C6EFCE;color:#006100}.cpill.y{background:#FFEB9C;color:#9C6500}.cpill.r{background:#FFC7CE;color:#9C0006}.cpill.muted{background:#eef1f6;color:#8a92a1}
   .vnotes{margin-top:7px;font-size:11.5px;line-height:1.55;color:#40485a;border-top:1px solid #f0f2f6;padding-top:6px}
+  .vwaiv{margin-top:4px;font-size:11.5px;font-style:italic;color:#6b7480}
+  .vwaiv b{font-style:normal;color:#40485a}
   .vact{margin-top:9px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
   .reqwhen{font-size:11px;font-style:italic;color:#8a92a1}
   .projgrp{margin:18px 0 8px;padding:6px 10px;background:#eef2f8;border-left:4px solid #2F5496;border-radius:4px;font-weight:bold;font-size:13.5px;color:#1f2733;display:flex;align-items:center;gap:8px}
   .projgrp:first-child{margin-top:0}
   .projgrp .cnt{font-weight:normal;font-size:11.5px;color:#6b7480}
+  .exportbar{margin:22px 0 8px;text-align:center}
+  #exportbtn{padding:10px 20px;border:1px solid #1a7f37;background:#1a7f37;color:#fff;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer}
+  #exportbtn:hover{background:#166a2e}
   .reqbtn{display:inline-block;padding:6px 12px;border:1px solid #2F5496;color:#2F5496;background:#fff;border-radius:8px;font-size:12px;font-weight:bold;text-decoration:none}
   .reqbtn:hover{background:#2F5496;color:#fff}
   .reqbtn:disabled{opacity:.45;cursor:not-allowed;border-color:#aab3c0;color:#8a92a1;background:#fff}
@@ -100,7 +105,7 @@
 const MSAL_CLIENT_ID = '4bb1f92c-c0a9-4dd6-97a3-2d8c8c9fe27a';    // Azure SPA app registration (client) ID
 const TENANT = '848aa890-7982-4028-befa-3323d82583ce';           // Bailey Harris tenant
 const SCOPES = ['Files.Read.All','User.Read'];                    // Graph read + identity (for Sync)
-const SYNC_WORKER_URL = 'https://bh-compliance-sync.soft-math-3331.workers.dev/';  // set to your Cloudflare Worker URL to enable the Sync button
+const SYNC_WORKER_URL = '';                                       // set to your Cloudflare Worker URL to enable the Sync button
 const DRIVE_ID = 'b!UgjUeEqLf0e6Z37An3qt5NP_8dR2rQJBoZpkPrOgBP0b4x1AxB_JT5QG_didjvoe';
 const ITEM_ID  = '01DG2CN7YZK66GZHQHD5ALV5QO4M275DKG';
 const THRESHOLD = 30;
@@ -113,6 +118,10 @@ function billyInsuranceDocs(r){
   if(r.billy_project_id && r.billy_contract_id)                                          // project-specific (subs AND POs use /subcontract/)
     return BILLY_DOCS_BASE+'/projects/'+r.billy_project_id+'/subcontract/'+r.billy_contract_id+'/Documents';
   return billyVendorDocs(r);                                                             // missing ids -> safe fallback (company directory)
+}
+function waiversOf(r){   // coverages Billy has marked waived (day-value === 'waived')
+  const map=[['gcl_days','GC License'],['wc_days','WC'],['ulel_days','Umbrella/Excess'],['cgl_days','GL'],['auto_days','Auto'],['prof_days','Professional Liability']];
+  return map.filter(([k])=>r[k]==='waived').map(([,lbl])=>lbl);
 }
 function billyVendorLink(r){                                                             // vendor name -> Billy record
   if(r.global_coi!=='Yes' && r.billy_project_id && r.billy_contract_id)
@@ -187,44 +196,49 @@ function buildUI(){
       <span class="grp">GC License required for subs with a Procore commitment &ge; $100k; <span class="pill g" style="font-size:9px">&check;AL</span> = verified on the Alabama GC website. W-9 tracked for all vendors (does not block). Non-Compliant = cannot be on site or paid.</span>
     </div>
     <div class="controls">
-      <label>Project view:</label>
-      <select id="proj"><option value="ALL">All projects (PD view)</option>${projects.map(p=>`<option>${p}</option>`).join('')}</select>
-      <label style="margin-left:8px">Filter:</label>
-      <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="docs">Documents needed</option><option value="global">Global COI vendors</option><option value="nogcl">Missing GC License</option><option value="now9">Missing W-9</option><option value="noins">Missing insurance doc</option></select>
-      <label style="margin-left:8px">Search vendor:</label>
-      <input id="q" type="text" placeholder="type a vendor name…" style="padding:8px 12px;border:1px solid #c7cfdb;border-radius:8px;font-size:14px;min-width:220px">
+      <label>View:</label>
+      <select id="proj"><option value="ALL">All projects</option><option value="GLOBAL">Global COI vendors</option><option value="MISSING">Billy Missing Docs</option>${projects.map(p=>`<option>${p}</option>`).join('')}</select>
+      <span id="filtwrap"><label style="margin-left:8px">Filter:</label>
+      <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="nogcl">Missing GC License</option><option value="now9">Missing W-9</option><option value="noins">Missing insurance doc</option></select></span>
+      <span id="qwrap"><label style="margin-left:8px">Search vendor:</label>
+      <input id="q" type="text" placeholder="type a vendor name…" style="padding:8px 12px;border:1px solid #c7cfdb;border-radius:8px;font-size:14px;min-width:220px"></span>
       <button id="syncbtn" title="Re-run the pull and refresh the data" style="margin-left:auto;padding:8px 16px;border:1px solid #2F5496;background:#2F5496;color:#fff;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer">↻ Sync now</button>
     </div>
     <div class="cards" id="cards"></div>
-    <div class="section-title">Vendors</div>
+    <div class="section-title" id="vendors-title">Vendors</div>
     <div id="list"></div>
-    <div class="section-title">Documents to add to Billy (from Procore / Alabama)</div><div id="valid"></div>`;
+    <div class="section-title" id="valid-title">Documents to add to Billy (from Procore / Alabama)</div><div id="valid"></div>
+    <div class="exportbar"><button id="exportbtn" title="Download a CSV of subcontractors (name, contract amount, GC license # &amp; exp, COI expirations) for the current view">⬇ Export for Project Audit</button></div>`;
   document.getElementById('proj').addEventListener('change',render);
   document.getElementById('filt').addEventListener('change',render);
   document.getElementById('q').addEventListener('input',render);
   document.getElementById('syncbtn').addEventListener('click',doSync);
+  document.getElementById('exportbtn').addEventListener('click',exportAudit);
   document.getElementById('foot').innerHTML="Source of truth: Billy (active projects &amp; contracts, per-coverage compliance incl. waivers). Coverages WC / UL-EL / CGL / Auto (+ Professional Liability where required). GCL &amp; W-9 tracked at the vendor/directory level; GCL required for subcontractors with a Procore commitment ≥ $100k and verified against Alabama GenConBd. W-9 tracked for all vendors (note only, does not block). On-Site and Pay are one verdict. Source file: SharePoint /sites/Resources/Compliance Dashboard/compliance_data.json.";
   render();
 }
 function render(){
   const proj=document.getElementById('proj').value, filt=document.getElementById('filt').value;
-  let rows = proj==='ALL' ? ROWS : ROWS.filter(r=>r.project===proj);
+  const isGlobalView = proj==='GLOBAL', isMissingView = proj==='MISSING';
+  let rows;
+  if(proj==='ALL' || isMissingView) rows=ROWS;
+  else if(isGlobalView){ const seen=new Set(); rows=ROWS.filter(r=>r.global_coi==='Yes').filter(r=>{ const k=r.vendor_id||r.vendor; if(seen.has(k))return false; seen.add(k); return true; }); }
+  else rows=ROWS.filter(r=>r.project===proj);
   const covBad = r => ['wc_days','ulel_days','cgl_days','auto_days','prof_days'].some(k=>{const v=r[k]; return v==='missing'||(v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0);});
   const docsNeeded = r => r.w9_on_file==='No' || r.gcl_missing_billy==='Yes' || covBad(r);
   const c={ok:0,soon:0,bad:0,docs:0};
   rows.forEach(r=>{const s=r.status; if(s==='Compliant')c.ok++;else if(s==='Expiring Soon')c.soon++;else if(s==='Non-Compliant')c.bad++; if(docsNeeded(r))c.docs++;});
   const card=(cls,n,label,f)=>`<div class="card ${cls}" style="cursor:pointer" onclick="setFilter('${f}')" title="Click to filter"><div class="n">${n}</div><div class="l">${label}</div></div>`;
+  const billyMiss = rows.filter(r=>r.w9_on_file==='No').length + rows.filter(r=>r.gcl_missing_billy==='Yes').length;
   document.getElementById('cards').innerHTML=
     card('total',rows.length,'Vendors','all')+
     card('ok',c.ok,'Compliant','compliant')+
     card('soon',c.soon,'Expiring Soon','soon')+
     card('bad',c.bad,'Non-Compliant','nc')+
-    card('gap',c.docs,'Documents Needed','docs');
+    `<div class="card gap" style="cursor:pointer" onclick="setView('MISSING')" title="Documents to add to Billy from Procore / Alabama"><div class="n">${billyMiss}</div><div class="l">Billy Missing Docs</div></div>`;
   let view=rows;
   if(filt==='nc') view=rows.filter(r=>r.status==='Non-Compliant');
   else if(filt==='compliant') view=rows.filter(r=>r.status==='Compliant');
-  else if(filt==='docs') view=rows.filter(docsNeeded);
-  else if(filt==='global'){ const seen=new Set(); view=rows.filter(r=>r.global_coi==='Yes').filter(r=>{ const k=r.vendor_id||r.vendor; if(seen.has(k))return false; seen.add(k); return true; }); }
   else if(filt==='soon') view=rows.filter(r=>r.status==='Expiring Soon');
   else if(filt==='nogcl') view=rows.filter(r=>r.gcl_required==='Yes' && (r.gcl_days==='missing' || (r.gcl_days!==''&&r.gcl_days!=='waived'&&!isNaN(Number(r.gcl_days))&&Number(r.gcl_days)<0)));
   else if(filt==='now9') view=rows.filter(r=>r.w9_on_file==='No');
@@ -297,6 +311,7 @@ function render(){
       +'<div class="vsub">'+(globalView ? 'Company directory &middot; Global blanket COI (applies to all projects)' : ((r.project||'')+' &middot; '+(r.project_number||'')+' &middot; '+(r.commitment||'')+' &middot; $'+Number(r.contract_value||0).toLocaleString()))+'</div>'
       +'<div class="vcov">'+cov+'</div>'
       +(r.notes?'<div class="vnotes">'+noteHtml(r.notes)+'</div>':'')
+      +((()=>{ const w=waiversOf(r); return w.length?'<div class="vwaiv"><b>Waived:</b> '+w.join(', ')+'</div>':''; })())
       +((()=>{
         const h=mailtoFor(r);
         const gclGap = (r.gcl_required==='Yes' && (r.gcl_days==='missing' || (r.gcl_days!==''&&r.gcl_days!=='waived'&&!isNaN(Number(r.gcl_days))&&Number(r.gcl_days)<0))) || r.gcl_missing_billy==='Yes';
@@ -321,7 +336,7 @@ function render(){
   };
   let listHtml;
   if(!view.length){ listHtml='<div class="empty">No vendors match this view.</div>'; }
-  else if(proj==='ALL' && filt!=='global'){
+  else if(proj==='ALL'){
     // group by project (a vendor can appear under multiple jobs)
     const groups={}; view.forEach(r=>{ const k=r.project||'(no project)'; (groups[k]=groups[k]||[]).push(r); });
     listHtml=Object.keys(groups).sort().map(pn=>{
@@ -329,7 +344,7 @@ function render(){
       return '<div class="projgrp">'+pn+'<span class="cnt">'+num+' &middot; '+g.length+' vendor'+(g.length===1?'':'s')+'</span></div>'+g.map(r=>vcard(r,false)).join('');
     }).join('');
   } else {
-    listHtml=view.map(r=>vcard(r, filt==='global')).join('');
+    listHtml=view.map(r=>vcard(r, isGlobalView)).join('');
   }
   document.getElementById('list').innerHTML = listHtml;
   document.querySelectorAll('.reqbtn:not([disabled])').forEach(b=>b.onclick=()=>onRequestDocs(b));
@@ -343,6 +358,38 @@ function render(){
     (w9miss.length?`<ul class="rsn">${li(w9miss)}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`+
     `<div class="gap-card"><h4>GCL not on file in Billy <span class="nc-proj">(${gclmiss.length}) — upload from Alabama/website</span></h4>`+
     (gclmiss.length?`<ul class="rsn">${gclli}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`;
+  // "Billy Missing Docs" is its own view — show only that section; hide vendor UI. Otherwise reverse.
+  const sh=(id,on)=>{ const el=document.getElementById(id); if(el) el.style.display = on?'':'none'; };
+  const leg=document.querySelector('.legend'); if(leg) leg.style.display = isMissingView?'none':'';
+  sh('cards',!isMissingView); sh('filtwrap',!isMissingView); sh('qwrap',!isMissingView);
+  sh('vendors-title',!isMissingView); sh('list',!isMissingView);
+  sh('valid-title',isMissingView); sh('valid',isMissingView);
+}
+window.setView = function(v){ const el=document.getElementById('proj'); if(el){ el.value=v; render(); el.scrollIntoView({behavior:'smooth',block:'nearest'}); } };
+function exportAudit(){
+  const proj=document.getElementById('proj').value;
+  // scope by the current View (project or all); audits want the full sub list, so ignore Filter/Search
+  let scope;
+  if(proj==='ALL'||proj==='MISSING') scope=ROWS;
+  else if(proj==='GLOBAL'){ const seen=new Set(); scope=ROWS.filter(r=>r.global_coi==='Yes').filter(r=>{const k=r.vendor_id||r.vendor; if(seen.has(k))return false; seen.add(k); return true;}); }
+  else scope=ROWS.filter(r=>r.project===proj);
+  const subs=scope.filter(r=>r.vendor_type!=='Supplier');   // suppliers don't count
+  subs.sort((a,b)=>(a.project||'').localeCompare(b.project||'')||(a.vendor||'').localeCompare(b.vendor||''));
+  const cols=['Project','Project #','Subcontractor','Contract Amount','GC License #','GC License Exp','WC Exp','GL Exp','Auto Exp','Umbrella/Excess Exp','Professional Liability Exp','Status'];
+  const cell=v=>{ const s=(v===null||v===undefined)?'':String(v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+  const rowsCsv=subs.map(r=>[
+    r.project||'', r.project_number||'', r.vendor||'',
+    (r.contract_value!==''&&r.contract_value!=null)?Number(r.contract_value):'',
+    r.al_license||'', r.gcl_exp_alabama||r.gcl_exp_billy||'',
+    r.wc_exp||'', r.cgl_exp||'', r.auto_exp||'', r.ulel_exp||'', r.prof_exp||'', r.status||''
+  ].map(cell).join(','));
+  const csv=[cols.map(cell).join(','), ...rowsCsv].join('\r\n');
+  const tag=(proj==='ALL'||proj==='GLOBAL'||proj==='MISSING')?'All-Projects':proj.replace(/[^A-Za-z0-9]+/g,'_');
+  const d=new Date(), pad=n=>String(n).padStart(2,'0');
+  const fname='Project_Audit_'+tag+'_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'.csv';
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 window.setFilter = function(v){ const el=document.getElementById('filt'); if(el){ el.value=v; render(); el.scrollIntoView({behavior:'smooth',block:'nearest'}); } };
 async function loadLastReqMap(token){
