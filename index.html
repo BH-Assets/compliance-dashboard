@@ -158,7 +158,7 @@ function buildUI(){
       <label>Project view:</label>
       <select id="proj"><option value="ALL">All projects (PD view)</option>${projects.map(p=>`<option>${p}</option>`).join('')}</select>
       <label style="margin-left:8px">Filter:</label>
-      <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="docs">Documents needed</option><option value="nogcl">Missing GC License</option><option value="now9">Missing W-9</option><option value="noins">Missing insurance doc</option></select>
+      <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="docs">Documents needed</option><option value="global">Global COI vendors</option><option value="nogcl">Missing GC License</option><option value="now9">Missing W-9</option><option value="noins">Missing insurance doc</option></select>
       <label style="margin-left:8px">Search vendor:</label>
       <input id="q" type="text" placeholder="type a vendor name…" style="padding:8px 12px;border:1px solid #c7cfdb;border-radius:8px;font-size:14px;min-width:220px">
       <button id="syncbtn" title="Re-run the pull and refresh the data" style="margin-left:auto;padding:8px 16px;border:1px solid #2F5496;background:#2F5496;color:#fff;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer">↻ Sync now</button>
@@ -192,6 +192,7 @@ function render(){
   if(filt==='nc') view=rows.filter(r=>r.status==='Non-Compliant');
   else if(filt==='compliant') view=rows.filter(r=>r.status==='Compliant');
   else if(filt==='docs') view=rows.filter(docsNeeded);
+  else if(filt==='global') view=rows.filter(r=>r.global_coi==='Yes');
   else if(filt==='soon') view=rows.filter(r=>r.status==='Expiring Soon');
   else if(filt==='nogcl') view=rows.filter(r=>r.gcl_required==='Yes' && (r.gcl_days==='missing' || (r.gcl_days!==''&&r.gcl_days!=='waived'&&!isNaN(Number(r.gcl_days))&&Number(r.gcl_days)<0)));
   else if(filt==='now9') view=rows.filter(r=>r.w9_on_file==='No');
@@ -265,7 +266,7 @@ function render(){
       +'<div class="vcov">'+cov+'</div>'
       +(r.notes?'<div class="vnotes">'+noteHtml(r.notes)+'</div>':'')
       +((()=>{ const h=mailtoFor(r); if(!h) return ''; const lbl=r.global_coi==='Yes'?'Request global docs':'Request updates';
-        const when = r.last_requested ? ('last requested '+new Date(r.last_requested).toLocaleDateString()) : 'not requested yet';
+        const when = (()=>{ if(!r.last_requested) return 'not requested yet'; const d=new Date(r.last_requested); const n=new Date(); return (d.toDateString()===n.toDateString()) ? 'Documents requested today' : ('last requested '+d.toLocaleDateString()); })();
         return '<div class="vact"><button class="reqbtn" data-mailto="'+encodeURIComponent(h)+'" data-vid="'+(r.vendor_id||'')+'" data-cid="'+(r.billy_contract_id||'')+'" data-global="'+(r.global_coi==='Yes'?1:0)+'">&#9993; '+lbl+'</button><span class="reqwhen">'+when+'</span></div>'; })())
       +'</div>';
   };
