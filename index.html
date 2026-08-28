@@ -59,8 +59,6 @@
   .cpill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:bold}
   .cpill.g{background:#C6EFCE;color:#006100}.cpill.y{background:#FFEB9C;color:#9C6500}.cpill.r{background:#FFC7CE;color:#9C0006}.cpill.muted{background:#eef1f6;color:#8a92a1}
   .vnotes{margin-top:7px;font-size:11.5px;line-height:1.55;color:#40485a;border-top:1px solid #f0f2f6;padding-top:6px}
-  .vwaiv{margin-top:4px;font-size:11.5px;font-style:italic;color:#6b7480}
-  .vwaiv b{font-style:normal;color:#40485a}
   .vact{margin-top:9px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
   .reqwhen{font-size:11px;font-style:italic;color:#8a92a1}
   .projgrp{margin:18px 0 8px;padding:6px 10px;background:#eef2f8;border-left:4px solid #2F5496;border-radius:4px;font-weight:bold;font-size:13.5px;color:#1f2733;display:flex;align-items:center;gap:8px}
@@ -118,10 +116,6 @@ function billyInsuranceDocs(r){
   if(r.billy_project_id && r.billy_contract_id)                                          // project-specific (subs AND POs use /subcontract/)
     return BILLY_DOCS_BASE+'/projects/'+r.billy_project_id+'/subcontract/'+r.billy_contract_id+'/Documents';
   return billyVendorDocs(r);                                                             // missing ids -> safe fallback (company directory)
-}
-function waiversOf(r){   // coverages Billy has marked waived (day-value === 'waived')
-  const map=[['gcl_days','GC License'],['wc_days','WC'],['ulel_days','Umbrella/Excess'],['cgl_days','GL'],['auto_days','Auto'],['prof_days','Professional Liability']];
-  return map.filter(([k])=>r[k]==='waived').map(([,lbl])=>lbl);
 }
 function billyVendorLink(r){                                                             // vendor name -> Billy record
   if(r.global_coi!=='Yes' && r.billy_project_id && r.billy_contract_id)
@@ -311,7 +305,6 @@ function render(){
       +'<div class="vsub">'+(globalView ? 'Company directory &middot; Global blanket COI (applies to all projects)' : ((r.project||'')+' &middot; '+(r.project_number||'')+' &middot; '+(r.commitment||'')+' &middot; $'+Number(r.contract_value||0).toLocaleString()))+'</div>'
       +'<div class="vcov">'+cov+'</div>'
       +(r.notes?'<div class="vnotes">'+noteHtml(r.notes)+'</div>':'')
-      +((()=>{ const w=waiversOf(r); return w.length?'<div class="vwaiv"><b>Waived:</b> '+w.join(', ')+'</div>':''; })())
       +((()=>{
         const h=mailtoFor(r);
         const gclGap = (r.gcl_required==='Yes' && (r.gcl_days==='missing' || (r.gcl_days!==''&&r.gcl_days!=='waived'&&!isNaN(Number(r.gcl_days))&&Number(r.gcl_days)<0))) || r.gcl_missing_billy==='Yes';
