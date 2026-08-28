@@ -218,13 +218,11 @@ function render(){
     const out=[];
     [['wc_days','Workers’ Compensation Insurance'],['ulel_days','Excess/Umbrella Liability Insurance'],['cgl_days','Commercial General Liability Insurance'],['auto_days','Commercial Automobile Insurance'],['prof_days','Professional Liability Insurance']].forEach(([k,label])=>{
       const v=r[k];
-      if(v==='missing') out.push('Current Certificate of Insurance for '+label+' (none on file)');
-      else if(v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0) out.push('Updated Certificate of Insurance — '+label+' appears expired');
+      if(v==='missing' || (v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0)) out.push(label);
     });
     if(r.gcl_required==='Yes'){ const g=r.gcl_days;
-      if(g==='missing'||(g!==''&&g!=='waived'&&!isNaN(Number(g))&&Number(g)<0)) out.push('Current General Contractor’s License / Subcontractor’s License');
-      else if(r.gcl_missing_billy==='Yes') out.push('Copy of your General Contractor’s License / Subcontractor’s License for our records'); }
-    if(r.w9_on_file==='No') out.push('Completed W-9');
+      if(g==='missing'||(g!==''&&g!=='waived'&&!isNaN(Number(g))&&Number(g)<0)) out.push('General Contractor’s License / Subcontractor’s License'); }
+    if(r.w9_on_file==='No') out.push('W-9');
     return out;
   };
   const mailtoFor = r => {
@@ -236,7 +234,8 @@ function render(){
     const intro = isGlobal
       ? 'Our records indicate the following global compliance documents have expired or are missing. As a reminder, you carry ONE blanket/global COI that covers all Bailey Harris Construction projects:'
       : 'Our records indicate the following compliance documents are missing or expired for '+r.project+':';
-    const body='Dear '+r.vendor+',\n\n'+intro+'\n\n'+items.map(i=>'  • '+i).join('\n')+'\n\nPlease note: copies of the actual policy endorsements are also required to confirm the coverage is in force. A Certificate of Insurance (COI) is informational only and does not by itself prove that coverage exists.\n\nPlease send the updated documentation at your earliest convenience so we can keep your account current for on-site access and payment.\n\nThank you,\nBailey Harris Construction';
+    const uploadLine = SYNC_WORKER_URL ? '\n\nA secure upload link has been sent to you from our compliance system (Billy Insurance) — you may upload directly there, or reply to this email with the documents.' : '';
+    const body='Dear '+r.vendor+',\n\n'+intro+'\n\n'+items.map(i=>'  • '+i).join('\n')+'\n\nPlease note: copies of the actual policy endorsements are also required to confirm the coverage is in force. A Certificate of Insurance (COI) is informational only and does not by itself prove that coverage exists.'+uploadLine+'\n\nPlease send the updated documentation at your earliest convenience so we can keep your account current for on-site access and payment.\n\nThank you,\nBailey Harris Construction';
     return 'mailto:'+encodeURIComponent(r.vendor_email||'')+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
   };
   const vcard = r => {
@@ -255,10 +254,11 @@ function render(){
       +'<div class="vsub">'+(r.project||'')+' &middot; '+(r.project_number||'')+' &middot; '+(r.commitment||'')+' &middot; $'+Number(r.contract_value||0).toLocaleString()+'</div>'
       +'<div class="vcov">'+cov+'</div>'
       +(r.notes?'<div class="vnotes">'+noteHtml(r.notes)+'</div>':'')
-      +((()=>{ const h=mailtoFor(r); const lbl=r.global_coi==='Yes'?'Request global docs':'Request updates'; return h?'<div class="vact"><a class="reqbtn" href="'+h+'">&#9993; '+lbl+'</a></div>':''; })())
+      +((()=>{ const h=mailtoFor(r); if(!h) return ''; const lbl=r.global_coi==='Yes'?'Request global docs':'Request updates'; return '<div class="vact"><button class="reqbtn" data-mailto="'+encodeURIComponent(h)+'" data-vid="'+(r.vendor_id||'')+'" data-cid="'+(r.billy_contract_id||'')+'" data-global="'+(r.global_coi==='Yes'?1:0)+'">&#9993; '+lbl+'</button></div>'; })())
       +'</div>';
   };
   document.getElementById('list').innerHTML = view.length ? view.map(vcard).join('') : '<div class="empty">No vendors match this view.</div>';
+  document.querySelectorAll('.reqbtn').forEach(b=>b.onclick=()=>onRequestDocs(b));
   // Data validation — items to add to Billy
   const w9miss = rows.filter(r=>r.w9_on_file==='No');
   const gclmiss = rows.filter(r=>r.gcl_missing_billy==='Yes');
@@ -271,6 +271,21 @@ function render(){
     (gclmiss.length?`<ul class="rsn">${gclli}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`;
 }
 window.setFilter = function(v){ const el=document.getElementById('filt'); if(el){ el.value=v; render(); el.scrollIntoView({behavior:'smooth',block:'nearest'}); } };
+async function onRequestDocs(btn){
+  const mailto=decodeURIComponent(btn.dataset.mailto||'');
+  const vid=btn.dataset.vid, cid=btn.dataset.cid, isGlobal=btn.dataset.global==='1';
+  if(SYNC_WORKER_URL && (vid||cid)){
+    const orig=btn.textContent; btn.disabled=true; btn.textContent='Sending link…';
+    try{
+      const acct=msalApp.getActiveAccount()||msalApp.getAllAccounts()[0];
+      const t=await msalApp.acquireTokenSilent({ scopes:SCOPES, account:acct });
+      await fetch(SYNC_WORKER_URL,{ method:'POST', headers:{ Authorization:'Bearer '+t.accessToken, 'Content-Type':'application/json' },
+        body:JSON.stringify({ action:'request', vendor_id:vid?Number(vid):undefined, contract_id:cid?Number(cid):undefined, global:isGlobal }) });
+    }catch(e){ /* still open the email draft */ }
+    btn.disabled=false; btn.textContent=orig;
+  }
+  if(mailto) window.location.href=mailto;
+}
 async function doSync(){
   const b=document.getElementById('syncbtn');
   if(!SYNC_WORKER_URL){ alert('Sync isn’t configured yet. The data still refreshes automatically on a schedule.'); return; }
