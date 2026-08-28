@@ -58,7 +58,8 @@
   .cpill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:bold}
   .cpill.g{background:#C6EFCE;color:#006100}.cpill.y{background:#FFEB9C;color:#9C6500}.cpill.r{background:#FFC7CE;color:#9C0006}.cpill.muted{background:#eef1f6;color:#8a92a1}
   .vnotes{margin-top:7px;font-size:11.5px;line-height:1.55;color:#40485a;border-top:1px solid #f0f2f6;padding-top:6px}
-  .vact{margin-top:9px}
+  .vact{margin-top:9px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .reqwhen{font-size:11px;font-style:italic;color:#8a92a1}
   .reqbtn{display:inline-block;padding:6px 12px;border:1px solid #2F5496;color:#2F5496;background:#fff;border-radius:8px;font-size:12px;font-weight:bold;text-decoration:none}
   .reqbtn:hover{background:#2F5496;color:#fff}
   @media(max-width:640px){
@@ -148,7 +149,7 @@ function buildUI(){
       <span class="grp"><span class="pill g">30+</span> current</span>
       <span class="grp"><span class="pill y">1&ndash;30</span> expiring soon</span>
       <span class="grp"><span class="muted">waived</span> exempt in Billy</span>
-      <span class="grp"><span class="pill r">&lt;0</span> expired / no coverage on file</span>
+      <span class="grp"><span class="pill r">expired/missing</span> expired / no coverage on file</span>
       <span class="grp"><span class="cpill muted">&mdash;</span> not required for this vendor</span>
       <br>
       <span class="grp">GC License required for subs with a Procore commitment &ge; $100k; <span class="pill g" style="font-size:9px">&check;AL</span> = verified on the Alabama GC website. W-9 tracked for all vendors (does not block). Non-Compliant = cannot be on site or paid.</span>
@@ -207,9 +208,9 @@ function render(){
     let cell;
     if(v==='n/a') cell='<span class="cpill muted">n/a</span>';
     else if(v==='waived') cell='<span class="cpill muted">waived</span>';
-    else if(v==='missing'||v==='expired') cell='<span class="cpill r">&lt;0</span>';
+    else if(v==='missing'||v==='expired') cell='<span class="cpill r">expired/missing</span>';
     else if(v===''||v==null) cell='<span class="cpill muted">&mdash;</span>';
-    else { const d=Number(v); if(isNaN(d)) cell='<span class="cpill muted">&mdash;</span>'; else if(d<0) cell='<span class="cpill r">&lt;0</span>'; else cell='<span class="cpill '+(d<=THRESHOLD?'y':'g')+'">'+d+'</span>'; }
+    else { const d=Number(v); if(isNaN(d)) cell='<span class="cpill muted">&mdash;</span>'; else if(d<0) cell='<span class="cpill r">expired/missing</span>'; else cell='<span class="cpill '+(d<=THRESHOLD?'y':'g')+'">'+d+'</span>'; }
     const dstr=(exp && v!=='waived' && v!=='n/a')?'<span class="mdate">'+exp+'</span>':'';
     return '<span class="mini"><span class="mlabel">'+label+(extra?(' '+extra):'')+'</span>'+cell+dstr+'</span>';
   }
@@ -263,7 +264,9 @@ function render(){
       +'<div class="vsub">'+(r.project||'')+' &middot; '+(r.project_number||'')+' &middot; '+(r.commitment||'')+' &middot; $'+Number(r.contract_value||0).toLocaleString()+'</div>'
       +'<div class="vcov">'+cov+'</div>'
       +(r.notes?'<div class="vnotes">'+noteHtml(r.notes)+'</div>':'')
-      +((()=>{ const h=mailtoFor(r); if(!h) return ''; const lbl=r.global_coi==='Yes'?'Request global docs':'Request updates'; return '<div class="vact"><button class="reqbtn" data-mailto="'+encodeURIComponent(h)+'" data-vid="'+(r.vendor_id||'')+'" data-cid="'+(r.billy_contract_id||'')+'" data-global="'+(r.global_coi==='Yes'?1:0)+'">&#9993; '+lbl+'</button></div>'; })())
+      +((()=>{ const h=mailtoFor(r); if(!h) return ''; const lbl=r.global_coi==='Yes'?'Request global docs':'Request updates';
+        const when = r.last_requested ? ('last requested '+new Date(r.last_requested).toLocaleDateString()) : 'not requested yet';
+        return '<div class="vact"><button class="reqbtn" data-mailto="'+encodeURIComponent(h)+'" data-vid="'+(r.vendor_id||'')+'" data-cid="'+(r.billy_contract_id||'')+'" data-global="'+(r.global_coi==='Yes'?1:0)+'">&#9993; '+lbl+'</button><span class="reqwhen">'+when+'</span></div>'; })())
       +'</div>';
   };
   document.getElementById('list').innerHTML = view.length ? view.map(vcard).join('') : '<div class="empty">No vendors match this view.</div>';
