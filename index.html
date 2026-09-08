@@ -68,10 +68,21 @@
   .exportbar{margin:22px 0 8px;text-align:right}
   #exportbtn{padding:10px 20px;border:1px solid #1a7f37;background:#1a7f37;color:#fff;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer}
   #exportbtn:hover{background:#166a2e}
+  .projpick{display:inline-block;vertical-align:top;min-width:250px}
+  #projsearch{width:100%;padding:7px 10px;border:1px solid #c7cfdb;border-radius:8px 8px 0 0;font-size:13px;border-bottom:none}
+  .projlist-actions{font-size:11px;padding:3px 8px;background:#f1f4f9;border:1px solid #c7cfdb;border-bottom:none}
+  .projlist-actions a{color:#2F5496;text-decoration:none}
+  .projlist{max-height:150px;overflow-y:auto;border:1px solid #c7cfdb;border-radius:0 0 8px 8px;background:#fff}
+  .projopt{display:block;padding:4px 9px;font-size:12.5px;font-weight:normal;cursor:pointer;white-space:nowrap}
+  .projopt:hover{background:#eef2f8}
+  .projopt input{margin-right:6px;vertical-align:middle}
   .tabbar{display:flex;gap:4px;border-bottom:2px solid #d7deea;margin-bottom:16px}
   .tab{padding:10px 22px;border:none;background:transparent;color:#5b6472;font-size:14px;font-weight:bold;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
   .tab:hover{color:#2F5496}
   .tab.active{color:#1F3864;border-bottom-color:#2F5496}
+  .subnav{display:flex;gap:8px;margin-bottom:14px}
+  .subtab{padding:6px 14px;border:1px solid #c7cfdb;background:#fff;color:#5b6472;border-radius:999px;font-size:12.5px;font-weight:bold;cursor:pointer}
+  .subtab.active{background:#2F5496;border-color:#2F5496;color:#fff}
   .lookup-help{font-size:12.5px;color:#5b6472;margin-bottom:8px}
   #lookupInput{width:100%;padding:10px 12px;border:1px solid #c7cfdb;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical}
   .lookup-actions{margin:10px 0;display:flex;gap:10px;flex-wrap:wrap}
@@ -146,6 +157,7 @@ function reqKey(r){ return (r.global_coi==='Yes') ? ('v:'+(r.vendor_id||'')) : (
 function localLastReq(k){ try{ return localStorage.getItem('bh_lr_'+k)||''; }catch(e){ return ''; } }
 function setLocalLastReq(k,iso){ try{ localStorage.setItem('bh_lr_'+k, iso); }catch(e){} }
 let ACTIVE_TAB='ops';  // ops | global | cmgr | acct
+let CMGR_SUB='vendors';  // Compliance Manager sub-view: vendors | docs
 let LR_MAP={};  // shared last-requested map from the Worker (KV), keyed like reqKey()
 function effLastReq(r){ const k=reqKey(r); return [r.last_requested||'', localLastReq(k), LR_MAP[k]||''].sort().slice(-1)[0]; }  // newest wins (ISO sorts chronologically)
 let ROWS = [], GENERATED = '';
@@ -204,6 +216,10 @@ function buildUI(){
       <button class="tab" data-tab="acct">For Accounting</button>
     </div>
     <div id="tab-ops">
+    <div id="cmgr-subnav" class="subnav" style="display:none">
+      <button class="subtab active" data-sub="vendors">All Vendors</button>
+      <button class="subtab" data-sub="docs">Documents to add to Billy</button>
+    </div>
     <div class="legend">
       <span class="grp"><b>Days to expiration:</b></span>
       <span class="grp"><span class="pill g">30+</span> current</span>
@@ -216,8 +232,11 @@ function buildUI(){
     </div>
     <div class="controls">
       <span id="projwrap"><label>Projects:</label>
-      <select id="proj" multiple size="4" style="min-width:240px;vertical-align:top">${projects.map(p=>`<option>${p}</option>`).join('')}</select>
-      <span class="lkmini" style="align-self:flex-end">Ctrl/Cmd-click for multiple</span></span>
+      <div class="projpick">
+        <input id="projsearch" type="text" placeholder="search projects…" autocomplete="off">
+        <div class="projlist-actions"><a href="#" id="projAll">all</a> &middot; <a href="#" id="projNone">none</a></div>
+        <div id="projlist" class="projlist">${projects.map(p=>`<label class="projopt"><input type="checkbox" class="projcb" value="${p.replace(/"/g,'&quot;')}"> ${p}</label>`).join('')}</div>
+      </div></span>
       <span id="filtwrap"><label style="margin-left:8px">Filter:</label>
       <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="nogcl">Missing GC License</option><option value="now9">Missing W-9</option><option value="noins">Missing insurance doc</option></select></span>
       <span id="qwrap"><label style="margin-left:8px">Search vendor:</label>
@@ -238,8 +257,14 @@ function buildUI(){
       <div id="lookupResults"></div>
     </div>`;
   document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
-  { const ps=document.getElementById('proj'); if(ps&&ps.options.length) ps.options[0].selected=true; }   // default: first project selected in Operations
-  document.getElementById('proj').addEventListener('change',render);
+  document.querySelectorAll('.subtab').forEach(b=>b.addEventListener('click',()=>{ CMGR_SUB=b.dataset.sub; document.querySelectorAll('.subtab').forEach(x=>x.classList.toggle('active',x.dataset.sub===CMGR_SUB)); render(); }));
+  // searchable multi-select project picker (Operations)
+  { const cbs=document.querySelectorAll('.projcb'); if(cbs.length) cbs[0].checked=true; }   // default: first project
+  document.getElementById('projsearch').addEventListener('input',function(){ const q=this.value.trim().toLowerCase();
+    document.querySelectorAll('#projlist .projopt').forEach(o=>{ o.style.display = o.textContent.toLowerCase().includes(q)?'':'none'; }); });
+  document.getElementById('projlist').addEventListener('change',e=>{ if(e.target.classList.contains('projcb')) render(); });
+  document.getElementById('projAll').addEventListener('click',e=>{ e.preventDefault(); document.querySelectorAll('#projlist .projopt').forEach(o=>{ if(o.style.display!=='none') o.querySelector('.projcb').checked=true; }); render(); });
+  document.getElementById('projNone').addEventListener('click',e=>{ e.preventDefault(); document.querySelectorAll('.projcb').forEach(c=>c.checked=false); render(); });
   document.getElementById('filt').addEventListener('change',render);
   document.getElementById('q').addEventListener('input',render);
   document.getElementById('syncbtn').addEventListener('click',doSync);
@@ -397,11 +422,15 @@ function render(){
   // Section visibility by tab. Compliance Manager (cmgr) adds the Billy-Missing-Docs section below the list.
   const sh=(id,on)=>{ const el=document.getElementById(id); if(el) el.style.display = on?'':'none'; };
   const leg=document.querySelector('.legend'); if(leg) leg.style.display='';
+  const cm = ACTIVE_TAB==='cmgr';
+  const showList = !cm || CMGR_SUB==='vendors';   // Compliance Mgr: pick vendor list OR the docs section
+  const showDocs = cm && CMGR_SUB==='docs';
+  sh('cmgr-subnav', cm);
   sh('projwrap', scope.showProj);           // project picker only in Operations
-  sh('filtwrap', true); sh('qwrap', true);
-  sh('cards', true); sh('vendors-title', true); sh('list', true);
-  sh('valid-title', scope.showValid); sh('valid', scope.showValid);
-  sh('exportbar', true);
+  sh('filtwrap', showList); sh('qwrap', showList);
+  sh('cards', showList); sh('vendors-title', showList); sh('list', showList);
+  sh('valid-title', showDocs); sh('valid', showDocs);
+  sh('exportbar', showList);
 }
 function switchTab(name){
   ACTIVE_TAB=name;
@@ -419,9 +448,8 @@ function currentScope(){
              isGlobalView:true, groupByProject:false, showValid:false, showProj:false, singleProj:false, tag:'Global-COI' }; }
   if(ACTIVE_TAB==='cmgr'){
     return { rows:ROWS, isGlobalView:false, groupByProject:true, showValid:true, showProj:false, singleProj:false, tag:'All-Projects' }; }
-  // ops = one or more selected projects
-  const sel=document.getElementById('proj');
-  const chosen=sel?Array.from(sel.selectedOptions).map(o=>o.value):[];
+  // ops = one or more checked projects (searchable multi-select)
+  const chosen=Array.from(document.querySelectorAll('.projcb:checked')).map(c=>c.value);
   return { rows:ROWS.filter(r=>chosen.includes(r.project)), isGlobalView:false, groupByProject:chosen.length>1, showValid:false, showProj:true,
            singleProj:chosen.length===1, projName:chosen[0]||'', chosen, tag:chosen.length===1?chosen[0].replace(/[^A-Za-z0-9]+/g,'_'):'Selected-Projects' };
 }
