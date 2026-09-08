@@ -145,6 +145,7 @@ function billyVendorLink(r){                                                    
 function reqKey(r){ return (r.global_coi==='Yes') ? ('v:'+(r.vendor_id||'')) : ('c:'+(r.billy_contract_id||'')); }
 function localLastReq(k){ try{ return localStorage.getItem('bh_lr_'+k)||''; }catch(e){ return ''; } }
 function setLocalLastReq(k,iso){ try{ localStorage.setItem('bh_lr_'+k, iso); }catch(e){} }
+let ACTIVE_TAB='ops';  // ops | global | cmgr | acct
 let LR_MAP={};  // shared last-requested map from the Worker (KV), keyed like reqKey()
 function effLastReq(r){ const k=reqKey(r); return [r.last_requested||'', localLastReq(k), LR_MAP[k]||''].sort().slice(-1)[0]; }  // newest wins (ISO sorts chronologically)
 let ROWS = [], GENERATED = '';
@@ -198,6 +199,8 @@ function buildUI(){
   document.getElementById('content').innerHTML=`
     <div class="tabbar">
       <button class="tab active" data-tab="ops">For Operations</button>
+      <button class="tab" data-tab="global">Global Vendors/Subs</button>
+      <button class="tab" data-tab="cmgr">Compliance Manager</button>
       <button class="tab" data-tab="acct">For Accounting</button>
     </div>
     <div id="tab-ops">
@@ -212,8 +215,9 @@ function buildUI(){
       <span class="grp">GC License required for subs with a Procore commitment &ge; $100k; <span class="pill g" style="font-size:9px">&check;AL</span> = verified on the Alabama GC website. W-9 tracked for all vendors (does not block). Non-Compliant = cannot be on site or paid.</span>
     </div>
     <div class="controls">
-      <label>View:</label>
-      <select id="proj"><option value="ALL">All projects</option><option value="GLOBAL">Global COI vendors</option><option value="MISSING">Billy Missing Docs</option>${projects.map(p=>`<option>${p}</option>`).join('')}</select>
+      <span id="projwrap"><label>Projects:</label>
+      <select id="proj" multiple size="4" style="min-width:240px;vertical-align:top">${projects.map(p=>`<option>${p}</option>`).join('')}</select>
+      <span class="lkmini" style="align-self:flex-end">Ctrl/Cmd-click for multiple</span></span>
       <span id="filtwrap"><label style="margin-left:8px">Filter:</label>
       <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="nogcl">Missing GC License</option><option value="now9">Missing W-9</option><option value="noins">Missing insurance doc</option></select></span>
       <span id="qwrap"><label style="margin-left:8px">Search vendor:</label>
@@ -234,6 +238,7 @@ function buildUI(){
       <div id="lookupResults"></div>
     </div>`;
   document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+  { const ps=document.getElementById('proj'); if(ps&&ps.options.length) ps.options[0].selected=true; }   // default: first project selected in Operations
   document.getElementById('proj').addEventListener('change',render);
   document.getElementById('filt').addEventListener('change',render);
   document.getElementById('q').addEventListener('input',render);
@@ -245,12 +250,10 @@ function buildUI(){
   render();
 }
 function render(){
-  const proj=document.getElementById('proj').value, filt=document.getElementById('filt').value;
-  const isGlobalView = proj==='GLOBAL', isMissingView = proj==='MISSING';
-  let rows;
-  if(proj==='ALL' || isMissingView) rows=ROWS;
-  else if(isGlobalView){ const seen=new Set(); rows=ROWS.filter(r=>r.global_coi==='Yes').filter(r=>{ const k=r.vendor_id||r.vendor; if(seen.has(k))return false; seen.add(k); return true; }); }
-  else rows=ROWS.filter(r=>r.project===proj);
+  if(ACTIVE_TAB==='acct') return;
+  const filt=document.getElementById('filt').value;
+  const scope=currentScope();
+  const rows=scope.rows, isGlobalView=scope.isGlobalView;
   const covKeys = r => { if((r.project_status||'').toLowerCase()!=='warranty') return ['wc_days','ulel_days','cgl_days','auto_days','prof_days']; return r.vendor_type==='Professional'?['cgl_days','prof_days']:['cgl_days']; };
   const covBad = r => covKeys(r).some(k=>{const v=r[k]; return v==='missing'||(v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0);});
   const docsNeeded = r => r.w9_on_file==='No' || r.gcl_missing_billy==='Yes' || covBad(r);
@@ -263,7 +266,7 @@ function render(){
     card('ok',c.ok,'Compliant','compliant')+
     card('soon',c.soon,'Expiring Soon','soon')+
     card('bad',c.bad,'Non-Compliant','nc')+
-    `<div class="card gap" style="cursor:pointer" onclick="setView('MISSING')" title="Documents to add to Billy from Procore / Alabama"><div class="n">${billyMiss}</div><div class="l">Billy Missing Docs</div></div>`;
+    `<div class="card gap" style="cursor:pointer" onclick="switchTab('cmgr')" title="Open Compliance Manager — documents to add to Billy from Procore / Alabama"><div class="n">${billyMiss}</div><div class="l">Billy Missing Docs</div></div>`;
   let view=rows;
   if(filt==='nc') view=rows.filter(r=>r.status==='Non-Compliant');
   else if(filt==='compliant') view=rows.filter(r=>r.status==='Compliant');
@@ -367,8 +370,8 @@ function render(){
       +'</div>';
   };
   let listHtml;
-  if(!view.length){ listHtml='<div class="empty">No vendors match this view.</div>'; }
-  else if(proj==='ALL'){
+  if(!view.length){ listHtml='<div class="empty">'+(ACTIVE_TAB==='ops'?'Pick one or more projects above.':'No vendors match this view.')+'</div>'; }
+  else if(scope.groupByProject){
     // group by project (a vendor can appear under multiple jobs)
     const groups={}; view.forEach(r=>{ const k=r.project||'(no project)'; (groups[k]=groups[k]||[]).push(r); });
     listHtml=Object.keys(groups).sort().map(pn=>{
@@ -391,33 +394,43 @@ function render(){
     (w9miss.length?`<ul class="rsn">${li(w9miss)}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`+
     `<div class="gap-card"><h4>GCL not on file in Billy <span class="nc-proj">(${gclmiss.length}) — upload from Alabama/website</span></h4>`+
     (gclmiss.length?`<ul class="rsn">${gclli}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`;
-  // "Billy Missing Docs" is its own view — show only that section; hide vendor UI. Otherwise reverse.
+  // Section visibility by tab. Compliance Manager (cmgr) adds the Billy-Missing-Docs section below the list.
   const sh=(id,on)=>{ const el=document.getElementById(id); if(el) el.style.display = on?'':'none'; };
-  const showMain = !isMissingView;   // Billy-Missing-Docs view hides the vendor UI, shows only the valid section
-  const leg=document.querySelector('.legend'); if(leg) leg.style.display = showMain?'':'none';
-  sh('cards',showMain); sh('filtwrap',showMain); sh('qwrap',showMain);
-  sh('vendors-title',showMain); sh('list',showMain);
-  sh('valid-title',isMissingView); sh('valid',isMissingView);
-  sh('exportbar', showMain || isMissingView);
+  const leg=document.querySelector('.legend'); if(leg) leg.style.display='';
+  sh('projwrap', scope.showProj);           // project picker only in Operations
+  sh('filtwrap', true); sh('qwrap', true);
+  sh('cards', true); sh('vendors-title', true); sh('list', true);
+  sh('valid-title', scope.showValid); sh('valid', scope.showValid);
+  sh('exportbar', true);
 }
 function switchTab(name){
+  ACTIVE_TAB=name;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
-  const ops=name==='ops';
+  const isAcct=name==='acct';
   const o=document.getElementById('tab-ops'), a=document.getElementById('tab-acct');
-  if(o) o.style.display = ops?'':'none';
-  if(a) a.style.display = ops?'none':'';
+  if(o) o.style.display = isAcct?'none':'';
+  if(a) a.style.display = isAcct?'':'none';
+  if(!isAcct) render();
 }
-window.setView = function(v){ const el=document.getElementById('proj'); if(el){ el.value=v; render(); el.scrollIntoView({behavior:'smooth',block:'nearest'}); } };
+// Scope + section rules per tab (shared by render and the GCL audit export)
+function currentScope(){
+  if(ACTIVE_TAB==='global'){ const seen=new Set();
+    return { rows:ROWS.filter(r=>r.global_coi==='Yes').filter(r=>{const k=r.vendor_id||r.vendor; if(seen.has(k))return false; seen.add(k); return true;}),
+             isGlobalView:true, groupByProject:false, showValid:false, showProj:false, singleProj:false, tag:'Global-COI' }; }
+  if(ACTIVE_TAB==='cmgr'){
+    return { rows:ROWS, isGlobalView:false, groupByProject:true, showValid:true, showProj:false, singleProj:false, tag:'All-Projects' }; }
+  // ops = one or more selected projects
+  const sel=document.getElementById('proj');
+  const chosen=sel?Array.from(sel.selectedOptions).map(o=>o.value):[];
+  return { rows:ROWS.filter(r=>chosen.includes(r.project)), isGlobalView:false, groupByProject:chosen.length>1, showValid:false, showProj:true,
+           singleProj:chosen.length===1, projName:chosen[0]||'', chosen, tag:chosen.length===1?chosen[0].replace(/[^A-Za-z0-9]+/g,'_'):'Selected-Projects' };
+}
 function exportAudit(){
-  const proj=document.getElementById('proj').value;
-  // scope by the current View (project or all); audits want the full sub list, so ignore Filter/Search
-  let scope;
-  if(proj==='ALL'||proj==='MISSING') scope=ROWS;
-  else if(proj==='GLOBAL'){ const seen=new Set(); scope=ROWS.filter(r=>r.global_coi==='Yes').filter(r=>{const k=r.vendor_id||r.vendor; if(seen.has(k))return false; seen.add(k); return true;}); }
-  else scope=ROWS.filter(r=>r.project===proj);
-  const subs=scope.filter(r=>r.vendor_type!=='Supplier');   // suppliers don't count
+  // scope by the current tab (Operations = selected projects; Compliance Mgr = all; Global = global vendors)
+  const scp=currentScope();
+  const subs=scp.rows.filter(r=>r.vendor_type!=='Supplier');   // suppliers don't count
   subs.sort((a,b)=>(a.project||'').localeCompare(b.project||'')||(a.vendor||'').localeCompare(b.vendor||''));
-  const singleProj = !(proj==='ALL'||proj==='GLOBAL'||proj==='MISSING');
+  const singleProj = scp.singleProj;
   // State GCL audit column layout (matches Alabama Licensing Board template) + GC License Exp.
   const cols=['Company Name','Address','City','State','Zip','Business Phone','Email','Trade/Specialty','GCL No.','GCL Exp. Date','Contract Division','Original Contract Amount','Start Date','End Date'];
   const AMT=11;  // currency column index
@@ -430,7 +443,7 @@ function exportAudit(){
   // optional project header block (only when a single project is in view)
   const pre=[];
   if(singleProj){ const f=subs[0]||{};
-    pre.push(['Project Name:', f.project||proj]);
+    pre.push(['Project Name:', f.project||'']);
     pre.push(['Project #:', f.project_number||'']);
     pre.push(['Project Address:', f.project_address||'']);
     pre.push(['Owner Name:', f.project_owner||'']);
@@ -439,7 +452,7 @@ function exportAudit(){
   }
   const aoa=pre.concat([cols], dataRows);
   const hdrRow=pre.length, dataStart=pre.length+1;
-  const tag=singleProj?proj.replace(/[^A-Za-z0-9]+/g,'_'):'All-Projects';
+  const tag=scp.tag||'Audit';
   const d=new Date(), pad=n=>String(n).padStart(2,'0');
   const stamp=d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());
 
@@ -487,19 +500,21 @@ function renderLookupResults(results){
   if(!results.length){ el.innerHTML='<div class="empty">Paste vendor names above and click &ldquo;Look up COIs&rdquo;.</div>'; return; }
   const st=s=>'<span class="pill '+(s==='Compliant'?'g':s==='Expiring Soon'?'y':'r')+'">'+(s||'?')+'</span>';
   const d=v=>v?v:'&mdash;';
-  const body=results.map(x=>{ if(!x.row) return '<tr class="notfound"><td>'+lkEsc(x.input)+'</td><td colspan="9">NOT FOUND in Billy</td></tr>';
+  const body=results.map(x=>{ if(!x.row) return '<tr class="notfound"><td>'+lkEsc(x.input)+'</td><td colspan="10">NOT FOUND in Billy</td></tr>';
     const r=x.row; const cls=r.status==='Non-Compliant'?'notfound':(r.status==='Expiring Soon'?'warn':'');
-    return '<tr class="'+cls+'"><td>'+lkEsc(x.input)+'</td><td>'+lkEsc(r.vendor)+'</td><td>'+lkEsc(r.project)+'</td><td>'+st(r.status)+'</td><td>'+d(r.cgl_exp)+'</td><td>'+d(r.wc_exp)+'</td><td>'+d(r.auto_exp)+'</td><td>'+d(r.ulel_exp)+'</td><td>'+d(r.prof_exp)+'</td><td>'+d(r.gcl_exp_alabama||r.gcl_exp_billy)+'</td></tr>'; }).join('');
+    const wtag=(r.project_status||'').toLowerCase()==='warranty'?'<span class="wtag">Warranty</span>':'';
+    return '<tr class="'+cls+'"><td>'+lkEsc(x.input)+'</td><td>'+lkEsc(r.vendor)+'</td><td>'+lkEsc(r.project)+' '+wtag+'</td><td>'+st(r.status)+'</td><td>'+d(r.cgl_exp)+'</td><td>'+d(r.wc_exp)+'</td><td>'+d(r.auto_exp)+'</td><td>'+d(r.ulel_exp)+'</td><td>'+d(r.prof_exp)+'</td><td>'+d(r.gcl_exp_alabama||r.gcl_exp_billy)+'</td></tr>'; }).join('');
   const nf=results.filter(x=>!x.row).length;
   el.innerHTML=(nf?'<div class="lkmini" style="margin-bottom:6px">'+nf+' of '+results.length+' line(s) not found — check spelling or that the vendor/project is active in Billy.</div>':'')
     +'<table class="lktable"><thead><tr><th>Searched</th><th>Matched Vendor</th><th>Project</th><th>Status</th><th>GL Exp</th><th>WC Exp</th><th>Auto Exp</th><th>UL/EL Exp</th><th>Prof Exp</th><th>GCL Exp</th></tr></thead><tbody>'+body+'</tbody></table>';
 }
 function exportLookup(){
-  const cols=['Searched','Found','Matched Vendor','Project','Status','GL Exp','WC Exp','Auto Exp','UL/EL Exp','Prof Exp','GCL Exp'];
-  const data=LOOKUP_RESULTS.map(x=>{ const r=x.row; return r?[x.input,'Yes',r.vendor||'',r.project||'',r.status||'',r.cgl_exp||'',r.wc_exp||'',r.auto_exp||'',r.ulel_exp||'',r.prof_exp||'',r.gcl_exp_alabama||r.gcl_exp_billy||'']:[x.input,'No','','','NOT FOUND','','','','','','']; });
+  const cols=['Searched','Found','Matched Vendor','Project','Warranty','Status','GL Exp','WC Exp','Auto Exp','UL/EL Exp','Prof Exp','GCL Exp'];
+  const wchk=r=>(r.project_status||'').toLowerCase()==='warranty'?'Warranty':'';
+  const data=LOOKUP_RESULTS.map(x=>{ const r=x.row; return r?[x.input,'Yes',r.vendor||'',r.project||'',wchk(r),r.status||'',r.cgl_exp||'',r.wc_exp||'',r.auto_exp||'',r.ulel_exp||'',r.prof_exp||'',r.gcl_exp_alabama||r.gcl_exp_billy||'']:[x.input,'No','','','','NOT FOUND','','','','','','']; });
   const aoa=[cols].concat(data);
   const dt=new Date(),pad=n=>String(n).padStart(2,'0'),stamp=dt.getFullYear()+pad(dt.getMonth()+1)+pad(dt.getDate());
-  if(typeof XLSX!=='undefined'){ const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:28},{wch:7},{wch:30},{wch:24},{wch:15},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12}]; ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:aoa.length-1,c:cols.length-1}})}; const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'COI Lookup'); XLSX.writeFile(wb,'COI_Lookup_'+stamp+'.xlsx'); return; }
+  if(typeof XLSX!=='undefined'){ const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:28},{wch:7},{wch:30},{wch:24},{wch:10},{wch:15},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12}]; ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:aoa.length-1,c:cols.length-1}})}; const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'COI Lookup'); XLSX.writeFile(wb,'COI_Lookup_'+stamp+'.xlsx'); return; }
   const cell=v=>{const s=v==null?'':String(v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}; const csv=aoa.map(r=>r.map(cell).join(',')).join('\r\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='COI_Lookup_'+stamp+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 window.setFilter = function(v){ const el=document.getElementById('filt'); if(el){ el.value=v; render(); el.scrollIntoView({behavior:'smooth',block:'nearest'}); } };
