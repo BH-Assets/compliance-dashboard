@@ -50,6 +50,7 @@
   a.vlink{text-decoration:none}a.vlink:hover{color:#2F5496;text-decoration:underline}
   .vtype{font-size:12px;color:#5b6472}
   .gtag{background:#DDEBF7;color:#1F3864;border:1px solid #b7ccf5;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:bold}
+  .wtag{background:#FFE9C7;color:#8a5a00;border:1px solid #f0cf8e;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:bold}
   .vright{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;color:#8a92a1}
   .vsub{font-size:11.5px;color:#8a92a1;margin-top:2px}
   .vcov{margin-top:8px;display:grid;grid-template-columns:repeat(7,minmax(72px,1fr));gap:9px 10px;align-items:start}
@@ -104,7 +105,7 @@
 const MSAL_CLIENT_ID = '4bb1f92c-c0a9-4dd6-97a3-2d8c8c9fe27a';    // Azure SPA app registration (client) ID
 const TENANT = '848aa890-7982-4028-befa-3323d82583ce';           // Bailey Harris tenant
 const SCOPES = ['Files.Read.All','User.Read'];                    // Graph read + identity (for Sync)
-const SYNC_WORKER_URL = 'https://bh-compliance-sync.soft-math-3331.workers.dev/';  // set to your Cloudflare Worker URL to enable the Sync button
+const SYNC_WORKER_URL = 'https://bh-compliance-sync.soft-math-3331.workers.dev';   // Cloudflare Worker (Sync / Request / shared last-requested)
 const DRIVE_ID = 'b!UgjUeEqLf0e6Z37An3qt5NP_8dR2rQJBoZpkPrOgBP0b4x1AxB_JT5QG_didjvoe';
 const ITEM_ID  = '01DG2CN7YZK66GZHQHD5ALV5QO4M275DKG';
 const THRESHOLD = 30;
@@ -219,7 +220,8 @@ function render(){
   if(proj==='ALL' || isMissingView) rows=ROWS;
   else if(isGlobalView){ const seen=new Set(); rows=ROWS.filter(r=>r.global_coi==='Yes').filter(r=>{ const k=r.vendor_id||r.vendor; if(seen.has(k))return false; seen.add(k); return true; }); }
   else rows=ROWS.filter(r=>r.project===proj);
-  const covBad = r => ['wc_days','ulel_days','cgl_days','auto_days','prof_days'].some(k=>{const v=r[k]; return v==='missing'||(v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0);});
+  const covKeys = r => (r.project_status||'').toLowerCase()==='warranty' ? ['cgl_days'] : ['wc_days','ulel_days','cgl_days','auto_days','prof_days'];
+  const covBad = r => covKeys(r).some(k=>{const v=r[k]; return v==='missing'||(v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0);});
   const docsNeeded = r => r.w9_on_file==='No' || r.gcl_missing_billy==='Yes' || covBad(r);
   const c={ok:0,soon:0,bad:0,docs:0};
   rows.forEach(r=>{const s=r.status; if(s==='Compliant')c.ok++;else if(s==='Expiring Soon')c.soon++;else if(s==='Non-Compliant')c.bad++; if(docsNeeded(r))c.docs++;});
@@ -237,7 +239,7 @@ function render(){
   else if(filt==='soon') view=rows.filter(r=>r.status==='Expiring Soon');
   else if(filt==='nogcl') view=rows.filter(r=>r.gcl_required==='Yes' && (r.gcl_days==='missing' || (r.gcl_days!==''&&r.gcl_days!=='waived'&&!isNaN(Number(r.gcl_days))&&Number(r.gcl_days)<0)));
   else if(filt==='now9') view=rows.filter(r=>r.w9_on_file==='No');
-  else if(filt==='noins') view=rows.filter(r=>['wc_days','ulel_days','cgl_days','auto_days','prof_days'].some(k=>{const v=r[k]; return v==='missing'||(v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0);}));
+  else if(filt==='noins') view=rows.filter(covBad);
   const q=(document.getElementById('q').value||'').trim().toLowerCase();
   if(q) view=view.filter(r=>(r.vendor||'').toLowerCase().includes(q));
   const typeLabel = r => (r.vendor_type==='Supplier' && r.site_type) ? ('Supplier ('+(r.site_type==='Third Party'?'3rd Party':r.site_type)+')') : (r.vendor_type||'');
@@ -293,15 +295,18 @@ function render(){
   const vcard = (r, globalView) => {
     const cls = r.status==='Compliant'?'g':(r.status==='Expiring Soon'?'y':'r');
     const alTag = r.gcl_on_alabama==='Yes'?'<span class="cpill g" style="font-size:9px">✓AL</span>':'';
+    const isW=(r.project_status||'').toLowerCase()==='warranty';   // warranty: GL completed-ops only
     const cov = [
       r.gcl_required==='Yes'?covChip('GCL',r.gcl_days,(r.gcl_exp_alabama||r.gcl_exp_billy||''),alTag):covChip('GCL','n/a',''),
-      covChip('WC',r.wc_days,r.wc_exp), covChip('UL/EL',r.ulel_days,r.ulel_exp), covChip('GL',r.cgl_days,r.cgl_exp), covChip('Auto',r.auto_days,r.auto_exp),
-      r.prof_required==='Yes'?covChip('Prof',r.prof_days,r.prof_exp):covChip('Prof','n/a',''),
+      covChip('WC',isW?'n/a':r.wc_days,isW?'':r.wc_exp), covChip('UL/EL',isW?'n/a':r.ulel_days,isW?'':r.ulel_exp),
+      covChip(isW?'GL (compl. ops)':'GL',r.cgl_days,r.cgl_exp), covChip('Auto',isW?'n/a':r.auto_days,isW?'':r.auto_exp),
+      (r.prof_required==='Yes'&&!isW)?covChip('Prof',r.prof_days,r.prof_exp):covChip('Prof','n/a',''),
       '<span class="mini"><span class="mlabel">W-9</span>'+okChip(r.w9_on_file)+'</span>'
     ].join('');
     return '<div class="vcard '+cls+'">'
       +'<div class="vhead">'+((()=>{ const vl=billyVendorLink(r); const nm=(r.vendor||''); return vl?'<a class="vname vlink" href="'+vl+'" target="_blank" rel="noopener" title="Open in Billy">'+nm+'</a>':'<span class="vname">'+nm+'</span>'; })())+'<span class="vtype">'+typeLabel(r)+'</span>'
       +(r.global_coi==='Yes'?'<span class="gtag" title="Global blanket COI: one COI on the company directory; project COI waived">Global COI</span>':'')
+      +((r.project_status||'').toLowerCase()==='warranty'?'<span class="wtag" title="Warranty period: GL Additional Insured for completed operations required (~2 yrs post-completion); subs may still submit pay apps">Warranty</span>':'')
       +'<span class="vright">On-Site/Pay '+okChip(r.on_site_ok)+' '+stPill(r.status)+'</span></div>'
       +'<div class="vsub">'+(globalView ? 'Company directory &middot; Global blanket COI (applies to all projects)' : ((r.project||'')+' &middot; '+(r.project_number||'')+' &middot; '+(r.commitment||'')+' &middot; $'+Number(r.contract_value||0).toLocaleString()))+'</div>'
       +'<div class="vcov">'+cov+'</div>'
@@ -335,7 +340,8 @@ function render(){
     const groups={}; view.forEach(r=>{ const k=r.project||'(no project)'; (groups[k]=groups[k]||[]).push(r); });
     listHtml=Object.keys(groups).sort().map(pn=>{
       const g=groups[pn]; const num=g[0].project_number?(' &middot; '+g[0].project_number):'';
-      return '<div class="projgrp">'+pn+'<span class="cnt">'+num+' &middot; '+g.length+' vendor'+(g.length===1?'':'s')+'</span></div>'+g.map(r=>vcard(r,false)).join('');
+      const wtag=(g[0].project_status||'').toLowerCase()==='warranty'?'<span class="wtag" title="Warranty period: GL Additional Insured for completed operations required (~2 yrs post-completion); subs may still submit pay apps">Warranty</span>':'';
+      return '<div class="projgrp">'+pn+' '+wtag+'<span class="cnt">'+num+' &middot; '+g.length+' vendor'+(g.length===1?'':'s')+'</span></div>'+g.map(r=>vcard(r,false)).join('');
     }).join('');
   } else {
     listHtml=view.map(r=>vcard(r, isGlobalView)).join('');
