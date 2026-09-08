@@ -68,6 +68,21 @@
   .exportbar{margin:22px 0 8px;text-align:right}
   #exportbtn{padding:10px 20px;border:1px solid #1a7f37;background:#1a7f37;color:#fff;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer}
   #exportbtn:hover{background:#166a2e}
+  .tabbar{display:flex;gap:4px;border-bottom:2px solid #d7deea;margin-bottom:16px}
+  .tab{padding:10px 22px;border:none;background:transparent;color:#5b6472;font-size:14px;font-weight:bold;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+  .tab:hover{color:#2F5496}
+  .tab.active{color:#1F3864;border-bottom-color:#2F5496}
+  .lookup-help{font-size:12.5px;color:#5b6472;margin-bottom:8px}
+  #lookupInput{width:100%;padding:10px 12px;border:1px solid #c7cfdb;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical}
+  .lookup-actions{margin:10px 0;display:flex;gap:10px;flex-wrap:wrap}
+  #lookupBtn{padding:9px 18px;border:1px solid #2F5496;background:#2F5496;color:#fff;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer}
+  #lookupExport{padding:9px 18px;border:1px solid #1a7f37;background:#1a7f37;color:#fff;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer}
+  .lktable{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;font-size:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .lktable th{background:#2F5496;color:#fff;padding:7px 8px;text-align:left;font-size:11px;white-space:nowrap}
+  .lktable td{padding:6px 8px;border-bottom:1px solid #eef1f6;white-space:nowrap}
+  .lktable tr.notfound td{background:#FFF3F3;color:#9C0006}
+  .lktable tr.warn td{background:#FFF9E9}
+  .lkmini{font-size:11px;color:#8a92a1}
   .reqbtn{display:inline-block;padding:6px 12px;border:1px solid #2F5496;color:#2F5496;background:#fff;border-radius:8px;font-size:12px;font-weight:bold;text-decoration:none}
   .reqbtn:hover{background:#2F5496;color:#fff}
   .reqbtn:disabled{opacity:.45;cursor:not-allowed;border-color:#aab3c0;color:#8a92a1;background:#fff}
@@ -181,6 +196,11 @@ async function load(){
 function buildUI(){
   const projects=[...new Set(ROWS.map(r=>r.project))].sort();
   document.getElementById('content').innerHTML=`
+    <div class="tabbar">
+      <button class="tab active" data-tab="ops">For Operations</button>
+      <button class="tab" data-tab="acct">For Accounting</button>
+    </div>
+    <div id="tab-ops">
     <div class="legend">
       <span class="grp"><b>Days to expiration:</b></span>
       <span class="grp"><span class="pill g">30+</span> current</span>
@@ -204,12 +224,23 @@ function buildUI(){
     <div class="section-title" id="vendors-title">Vendors</div>
     <div id="list"></div>
     <div class="section-title" id="valid-title">Documents to add to Billy (from Procore / Alabama)</div><div id="valid"></div>
-    <div class="exportbar"><button id="exportbtn" title="Download an Excel (.xlsx) of subcontractors (name, contract amount, GC license # &amp; exp, COI expirations) for the current view">⬇ Export for State Inspector GCL Audit</button></div>`;
+    <div class="exportbar" id="exportbar"><button id="exportbtn" title="Download an Excel (.xlsx) of subcontractors (name, contract amount, GC license # &amp; exp, COI expirations) for the current view">⬇ Export for State Inspector GCL Audit</button></div>
+    </div>
+    <div id="tab-acct" style="display:none">
+      <div class="section-title">Batch COI Lookup &mdash; verify coverage at time of payment</div>
+      <div class="lookup-help">Paste vendor names (one per line) — e.g. straight from ComputerEase. &ldquo;CODE - Name&rdquo; lines and truncated names are OK. You&rsquo;ll get each vendor&rsquo;s COI status and expiration dates, and can export the results.</div>
+      <textarea id="lookupInput" rows="8" placeholder="ROOFASSE - Roof Asset Ma...&#10;BDWELCH - B D Welch Const...&#10;David Allen Co Inc&#10;Knight Sign Industries"></textarea>
+      <div class="lookup-actions"><button id="lookupBtn">Look up COIs</button><button id="lookupExport" style="display:none">⬇ Export results (Excel)</button></div>
+      <div id="lookupResults"></div>
+    </div>`;
+  document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
   document.getElementById('proj').addEventListener('change',render);
   document.getElementById('filt').addEventListener('change',render);
   document.getElementById('q').addEventListener('input',render);
   document.getElementById('syncbtn').addEventListener('click',doSync);
   document.getElementById('exportbtn').addEventListener('click',exportAudit);
+  document.getElementById('lookupBtn').addEventListener('click',doLookup);
+  document.getElementById('lookupExport').addEventListener('click',exportLookup);
   document.getElementById('foot').innerHTML="Source of truth: Billy (active projects &amp; contracts, per-coverage compliance incl. waivers). Coverages WC / UL-EL / CGL / Auto (+ Professional Liability where required). GCL &amp; W-9 tracked at the vendor/directory level; GCL required for subcontractors with a Procore commitment ≥ $100k and verified against Alabama GenConBd. W-9 tracked for all vendors (note only, does not block). On-Site and Pay are one verdict. Source file: SharePoint /sites/Resources/Compliance Dashboard/compliance_data.json.";
   render();
 }
@@ -220,7 +251,7 @@ function render(){
   if(proj==='ALL' || isMissingView) rows=ROWS;
   else if(isGlobalView){ const seen=new Set(); rows=ROWS.filter(r=>r.global_coi==='Yes').filter(r=>{ const k=r.vendor_id||r.vendor; if(seen.has(k))return false; seen.add(k); return true; }); }
   else rows=ROWS.filter(r=>r.project===proj);
-  const covKeys = r => (r.project_status||'').toLowerCase()==='warranty' ? ['cgl_days'] : ['wc_days','ulel_days','cgl_days','auto_days','prof_days'];
+  const covKeys = r => { if((r.project_status||'').toLowerCase()!=='warranty') return ['wc_days','ulel_days','cgl_days','auto_days','prof_days']; return r.vendor_type==='Professional'?['cgl_days','prof_days']:['cgl_days']; };
   const covBad = r => covKeys(r).some(k=>{const v=r[k]; return v==='missing'||(v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0);});
   const docsNeeded = r => r.w9_on_file==='No' || r.gcl_missing_billy==='Yes' || covBad(r);
   const c={ok:0,soon:0,bad:0,docs:0};
@@ -295,12 +326,14 @@ function render(){
   const vcard = (r, globalView) => {
     const cls = r.status==='Compliant'?'g':(r.status==='Expiring Soon'?'y':'r');
     const alTag = r.gcl_on_alabama==='Yes'?'<span class="cpill g" style="font-size:9px">✓AL</span>':'';
-    const isW=(r.project_status||'').toLowerCase()==='warranty';   // warranty: GL completed-ops only
+    const isW=(r.project_status||'').toLowerCase()==='warranty';   // warranty: GL completed-ops (+ Prof for PSA)
+    const isProf=r.vendor_type==='Professional';
+    const profLive = r.prof_required==='Yes' && (!isW || isProf);   // Prof stays live for PSA in warranty
     const cov = [
       r.gcl_required==='Yes'?covChip('GCL',r.gcl_days,(r.gcl_exp_alabama||r.gcl_exp_billy||''),alTag):covChip('GCL','n/a',''),
       covChip('WC',isW?'n/a':r.wc_days,isW?'':r.wc_exp), covChip('UL/EL',isW?'n/a':r.ulel_days,isW?'':r.ulel_exp),
       covChip(isW?'GL (compl. ops)':'GL',r.cgl_days,r.cgl_exp), covChip('Auto',isW?'n/a':r.auto_days,isW?'':r.auto_exp),
-      (r.prof_required==='Yes'&&!isW)?covChip('Prof',r.prof_days,r.prof_exp):covChip('Prof','n/a',''),
+      profLive?covChip('Prof',r.prof_days,r.prof_exp):covChip('Prof','n/a',''),
       '<span class="mini"><span class="mlabel">W-9</span>'+okChip(r.w9_on_file)+'</span>'
     ].join('');
     return '<div class="vcard '+cls+'">'
@@ -360,10 +393,19 @@ function render(){
     (gclmiss.length?`<ul class="rsn">${gclli}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`;
   // "Billy Missing Docs" is its own view — show only that section; hide vendor UI. Otherwise reverse.
   const sh=(id,on)=>{ const el=document.getElementById(id); if(el) el.style.display = on?'':'none'; };
-  const leg=document.querySelector('.legend'); if(leg) leg.style.display = isMissingView?'none':'';
-  sh('cards',!isMissingView); sh('filtwrap',!isMissingView); sh('qwrap',!isMissingView);
-  sh('vendors-title',!isMissingView); sh('list',!isMissingView);
+  const showMain = !isMissingView;   // Billy-Missing-Docs view hides the vendor UI, shows only the valid section
+  const leg=document.querySelector('.legend'); if(leg) leg.style.display = showMain?'':'none';
+  sh('cards',showMain); sh('filtwrap',showMain); sh('qwrap',showMain);
+  sh('vendors-title',showMain); sh('list',showMain);
   sh('valid-title',isMissingView); sh('valid',isMissingView);
+  sh('exportbar', showMain || isMissingView);
+}
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+  const ops=name==='ops';
+  const o=document.getElementById('tab-ops'), a=document.getElementById('tab-acct');
+  if(o) o.style.display = ops?'':'none';
+  if(a) a.style.display = ops?'none':'';
 }
 window.setView = function(v){ const el=document.getElementById('proj'); if(el){ el.value=v; render(); el.scrollIntoView({behavior:'smooth',block:'nearest'}); } };
 function exportAudit(){
@@ -416,6 +458,49 @@ function exportAudit(){
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob); const a=document.createElement('a');
   a.href=url; a.download='State_GCL_Audit_'+tag+'_'+stamp+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+// ---- Batch COI lookup (accounting: verify coverage at time of payment) ----
+let LOOKUP_RESULTS=[];
+function lkEsc(s){ return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function lkNorm(s){ return String(s||'').toUpperCase().replace(/&/g,' AND ').replace(/\b(LLC|L L C|INC|INCORPORATED|CO|COMPANY|CORP|CORPORATION|LP|LLP|PC|PLLC|LTD)\b/g,' ').replace(/[^A-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim(); }
+function lkParseLine(line){ let s=(line||'').trim(); if(!s) return null;
+  const m=s.match(/^([A-Z0-9]{3,})\s*[-–]\s*(.+)$/); if(m) s=m[2];         // strip ComputerEase "CODE - Name"
+  s=s.replace(/[.…]{2,}$/,'').replace(/…$/,'').trim(); return s; }    // drop trailing truncation dots
+function lkMatch(nameNorm){ if(!nameNorm) return [];
+  return ROWS.filter(r=>{ const v=lkNorm(r.vendor); if(!v) return false;
+    if(v===nameNorm||v.startsWith(nameNorm)||nameNorm.startsWith(v)||v.includes(nameNorm)||nameNorm.includes(v)) return true;
+    const A=new Set(nameNorm.split(' ').filter(Boolean)), B=new Set(v.split(' ').filter(Boolean));
+    if(!A.size||!B.size) return false; let i=0; for(const t of A) if(B.has(t)) i++; return i/Math.min(A.size,B.size)>=0.75; }); }
+function doLookup(){
+  const raw=(document.getElementById('lookupInput').value||'').split('\n');
+  const results=[];
+  for(const line of raw){ const nm=lkParseLine(line); if(nm===null||nm==='') continue; const norm=lkNorm(nm);
+    const matched=lkMatch(norm);
+    if(!matched.length){ results.push({input:nm,row:null}); }
+    else { const seen=new Set(); for(const r of matched){ const k=(r.vendor_id||r.vendor)+'|'+r.project; if(seen.has(k))continue; seen.add(k); results.push({input:nm,row:r}); } }
+  }
+  LOOKUP_RESULTS=results; renderLookupResults(results);
+  document.getElementById('lookupExport').style.display = results.length?'':'none';
+}
+function renderLookupResults(results){
+  const el=document.getElementById('lookupResults');
+  if(!results.length){ el.innerHTML='<div class="empty">Paste vendor names above and click &ldquo;Look up COIs&rdquo;.</div>'; return; }
+  const st=s=>'<span class="pill '+(s==='Compliant'?'g':s==='Expiring Soon'?'y':'r')+'">'+(s||'?')+'</span>';
+  const d=v=>v?v:'&mdash;';
+  const body=results.map(x=>{ if(!x.row) return '<tr class="notfound"><td>'+lkEsc(x.input)+'</td><td colspan="9">NOT FOUND in Billy</td></tr>';
+    const r=x.row; const cls=r.status==='Non-Compliant'?'notfound':(r.status==='Expiring Soon'?'warn':'');
+    return '<tr class="'+cls+'"><td>'+lkEsc(x.input)+'</td><td>'+lkEsc(r.vendor)+'</td><td>'+lkEsc(r.project)+'</td><td>'+st(r.status)+'</td><td>'+d(r.cgl_exp)+'</td><td>'+d(r.wc_exp)+'</td><td>'+d(r.auto_exp)+'</td><td>'+d(r.ulel_exp)+'</td><td>'+d(r.prof_exp)+'</td><td>'+d(r.gcl_exp_alabama||r.gcl_exp_billy)+'</td></tr>'; }).join('');
+  const nf=results.filter(x=>!x.row).length;
+  el.innerHTML=(nf?'<div class="lkmini" style="margin-bottom:6px">'+nf+' of '+results.length+' line(s) not found — check spelling or that the vendor/project is active in Billy.</div>':'')
+    +'<table class="lktable"><thead><tr><th>Searched</th><th>Matched Vendor</th><th>Project</th><th>Status</th><th>GL Exp</th><th>WC Exp</th><th>Auto Exp</th><th>UL/EL Exp</th><th>Prof Exp</th><th>GCL Exp</th></tr></thead><tbody>'+body+'</tbody></table>';
+}
+function exportLookup(){
+  const cols=['Searched','Found','Matched Vendor','Project','Status','GL Exp','WC Exp','Auto Exp','UL/EL Exp','Prof Exp','GCL Exp'];
+  const data=LOOKUP_RESULTS.map(x=>{ const r=x.row; return r?[x.input,'Yes',r.vendor||'',r.project||'',r.status||'',r.cgl_exp||'',r.wc_exp||'',r.auto_exp||'',r.ulel_exp||'',r.prof_exp||'',r.gcl_exp_alabama||r.gcl_exp_billy||'']:[x.input,'No','','','NOT FOUND','','','','','','']; });
+  const aoa=[cols].concat(data);
+  const dt=new Date(),pad=n=>String(n).padStart(2,'0'),stamp=dt.getFullYear()+pad(dt.getMonth()+1)+pad(dt.getDate());
+  if(typeof XLSX!=='undefined'){ const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:28},{wch:7},{wch:30},{wch:24},{wch:15},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12}]; ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:aoa.length-1,c:cols.length-1}})}; const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'COI Lookup'); XLSX.writeFile(wb,'COI_Lookup_'+stamp+'.xlsx'); return; }
+  const cell=v=>{const s=v==null?'':String(v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}; const csv=aoa.map(r=>r.map(cell).join(',')).join('\r\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='COI_Lookup_'+stamp+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 window.setFilter = function(v){ const el=document.getElementById('filt'); if(el){ el.value=v; render(); el.scrollIntoView({behavior:'smooth',block:'nearest'}); } };
 async function loadLastReqMap(token){
