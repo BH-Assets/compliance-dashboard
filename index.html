@@ -51,6 +51,7 @@
   .vtype{font-size:12px;color:#5b6472}
   .gtag{background:#DDEBF7;color:#1F3864;border:1px solid #b7ccf5;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:bold}
   .wtag{background:#FFE9C7;color:#8a5a00;border:1px solid #f0cf8e;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:bold}
+  .itag{background:#e9ecf1;color:#6b7480;border:1px solid #cfd6e0;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:bold}
   .vright{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;color:#8a92a1}
   .vsub{font-size:11.5px;color:#8a92a1;margin-top:2px}
   .vcov{margin-top:8px;display:grid;grid-template-columns:repeat(7,minmax(72px,1fr));gap:9px 10px;align-items:start}
@@ -65,9 +66,11 @@
   .projgrp{margin:18px 0 8px;padding:6px 10px;background:#eef2f8;border-left:4px solid #2F5496;border-radius:4px;font-weight:bold;font-size:13.5px;color:#1f2733;display:flex;align-items:center;gap:8px}
   .projgrp:first-child{margin-top:0}
   .projgrp .cnt{font-weight:normal;font-size:11.5px;color:#6b7480}
-  .exportbar{margin:22px 0 8px;text-align:right}
+  .exportbar{margin:22px 0 8px;text-align:right;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
   #exportbtn{padding:10px 20px;border:1px solid #1a7f37;background:#1a7f37;color:#fff;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer}
   #exportbtn:hover{background:#166a2e}
+  .recbtn{padding:10px 20px;border:1px solid #2F5496;background:#2F5496;color:#fff;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer}
+  .recbtn:hover{background:#26467d}
   .projpick{display:inline-block;vertical-align:top;min-width:250px}
   #projsearch{width:100%;padding:7px 10px;border:1px solid #c7cfdb;border-radius:8px 8px 0 0;font-size:13px;border-bottom:none}
   .projlist-actions{font-size:11px;padding:3px 8px;background:#f1f4f9;border:1px solid #c7cfdb;border-bottom:none}
@@ -247,7 +250,7 @@ function buildUI(){
     <div class="section-title" id="vendors-title">Vendors</div>
     <div id="list"></div>
     <div class="section-title" id="valid-title">Documents to add to Billy (from Procore / Alabama)</div><div id="valid"></div>
-    <div class="exportbar" id="exportbar"><button id="exportbtn" title="Download an Excel (.xlsx) of subcontractors (name, contract amount, GC license # &amp; exp, COI expirations) for the current view">⬇ Export for State Inspector GCL Audit</button></div>
+    <div class="exportbar" id="exportbar"><button id="recbtn" class="recbtn" title="Download an Excel (.xlsx) of ALL records in view — every vendor with contract dates, compliance status, and tags">⬇ Export Project Records</button><button id="exportbtn" title="Download an Excel (.xlsx) of subcontractors (name, contract amount, GC license # &amp; exp, COI expirations) for the current view">⬇ Export for State Inspector GCL Audit</button></div>
     </div>
     <div id="tab-acct" style="display:none">
       <div class="section-title">Batch COI Lookup &mdash; verify coverage at time of payment</div>
@@ -269,6 +272,7 @@ function buildUI(){
   document.getElementById('q').addEventListener('input',render);
   document.getElementById('syncbtn').addEventListener('click',doSync);
   document.getElementById('exportbtn').addEventListener('click',exportAudit);
+  document.getElementById('recbtn').addEventListener('click',exportRecords);
   document.getElementById('lookupBtn').addEventListener('click',doLookup);
   document.getElementById('lookupExport').addEventListener('click',exportLookup);
   document.getElementById('foot').innerHTML="Source of truth: Billy (active projects &amp; contracts, per-coverage compliance incl. waivers). Coverages WC / UL-EL / CGL / Auto (+ Professional Liability where required). GCL &amp; W-9 tracked at the vendor/directory level; GCL required for subcontractors with a Procore commitment ≥ $100k and verified against Alabama GenConBd. W-9 tracked for all vendors (note only, does not block). On-Site and Pay are one verdict. Source file: SharePoint /sites/Resources/Compliance Dashboard/compliance_data.json.";
@@ -368,6 +372,7 @@ function render(){
       +'<div class="vhead">'+((()=>{ const vl=billyVendorLink(r); const nm=(r.vendor||''); return vl?'<a class="vname vlink" href="'+vl+'" target="_blank" rel="noopener" title="Open in Billy">'+nm+'</a>':'<span class="vname">'+nm+'</span>'; })())+'<span class="vtype">'+typeLabel(r)+'</span>'
       +(r.global_coi==='Yes'?'<span class="gtag" title="Global blanket COI: one COI on the company directory; project COI waived">Global COI</span>':'')
       +((r.project_status||'').toLowerCase()==='warranty'?'<span class="wtag" title="Warranty period: GL Additional Insured for completed operations required (~2 yrs post-completion); subs may still submit pay apps">Warranty</span>':'')
+      +(r.contract_active==='No'?'<span class="itag" title="Contract is inactive in Billy (e.g., a closed/completed PO on a warranty job)">Inactive</span>':'')
       +'<span class="vright">On-Site/Pay '+okChip(r.on_site_ok)+' '+stPill(r.status)+'</span></div>'
       +'<div class="vsub">'+(globalView ? 'Company directory &middot; Global blanket COI (applies to all projects)' : ((r.project||'')+' &middot; '+(r.project_number||'')+' &middot; '+(r.commitment||'')+' &middot; $'+Number(r.contract_value||0).toLocaleString()))+'</div>'
       +'<div class="vcov">'+cov+'</div>'
@@ -453,6 +458,33 @@ function currentScope(){
   return { rows:ROWS.filter(r=>chosen.includes(r.project)), isGlobalView:false, groupByProject:chosen.length>1, showValid:false, showProj:true,
            singleProj:chosen.length===1, projName:chosen[0]||'', chosen, tag:chosen.length===1?chosen[0].replace(/[^A-Za-z0-9]+/g,'_'):'Selected-Projects' };
 }
+function exportRecords(){
+  // full record dump for the current tab scope: every vendor, all dates + status + tags
+  const scp=currentScope();
+  const recs=scp.rows.slice().sort((a,b)=>(a.project||'').localeCompare(b.project||'')||(a.vendor||'').localeCompare(b.vendor||''));
+  const cols=['Project','Project #','Project Status','Vendor','Type','Site','Global COI','Commitment #','Contract Amount','Compliance Status','On-Site/Pay','GC License #','GCL Exp','WC Exp','GL Exp','Auto Exp','UL/EL Exp','Prof Exp','W-9 on File','Notes'];
+  const AMT=8;
+  const data=recs.map(r=>[
+    r.project||'', r.project_number||'', r.project_status||'', r.vendor||'', r.vendor_type||'', r.site_type||'',
+    r.global_coi==='Yes'?'Yes':'', r.commitment||'',
+    (r.contract_value!==''&&r.contract_value!=null)?Number(r.contract_value):null,
+    r.status||'', r.on_site_ok||'', r.al_license||'', r.gcl_exp_alabama||r.gcl_exp_billy||'',
+    r.wc_exp||'', r.cgl_exp||'', r.auto_exp||'', r.ulel_exp||'', r.prof_exp||'', r.w9_on_file||'', r.notes||''
+  ]);
+  const aoa=[cols].concat(data);
+  const dt=new Date(),pad=n=>String(n).padStart(2,'0'),stamp=dt.getFullYear()+pad(dt.getMonth()+1)+pad(dt.getDate());
+  const fbase='Project_Records_'+(scp.tag||'All')+'_'+stamp;
+  if(typeof XLSX!=='undefined'){
+    const ws=XLSX.utils.aoa_to_sheet(aoa);
+    for(let i=1;i<aoa.length;i++){ const ref=XLSX.utils.encode_cell({r:i,c:AMT}); const cell=ws[ref]; if(cell && typeof cell.v==='number'){ cell.t='n'; cell.z='$#,##0.00'; } }
+    ws['!cols']=[{wch:24},{wch:9},{wch:12},{wch:30},{wch:14},{wch:12},{wch:10},{wch:14},{wch:16},{wch:15},{wch:11},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:11},{wch:44}];
+    ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:aoa.length-1,c:cols.length-1}})};
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Project Records'); XLSX.writeFile(wb,fbase+'.xlsx'); return;
+  }
+  const cell=v=>{const s=(v===null||v===undefined)?'':String(v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
+  const csv=aoa.map(r=>r.map(cell).join(',')).join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fbase+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
 function exportAudit(){
   // scope by the current tab (Operations = selected projects; Compliance Mgr = all; Global = global vendors)
   const scp=currentScope();
@@ -508,7 +540,8 @@ function lkParseLine(line){ let s=(line||'').trim(); if(!s) return null;
   const m=s.match(/^([A-Z0-9]{3,})\s*[-–]\s*(.+)$/); if(m) s=m[2];         // strip ComputerEase "CODE - Name"
   s=s.replace(/[.…]{2,}$/,'').replace(/…$/,'').trim(); return s; }    // drop trailing truncation dots
 function lkMatch(nameNorm){ if(!nameNorm) return [];
-  return ROWS.filter(r=>{ const v=lkNorm(r.vendor); if(!v) return false;
+  return ROWS.filter(r=>{ if(r.contract_active==='No') return false;   // accounting: skip inactive contracts
+    const v=lkNorm(r.vendor); if(!v) return false;
     if(v===nameNorm||v.startsWith(nameNorm)||nameNorm.startsWith(v)||v.includes(nameNorm)||nameNorm.includes(v)) return true;
     const A=new Set(nameNorm.split(' ').filter(Boolean)), B=new Set(v.split(' ').filter(Boolean));
     if(!A.size||!B.size) return false; let i=0; for(const t of A) if(B.has(t)) i++; return i/Math.min(A.size,B.size)>=0.75; }); }
@@ -530,19 +563,20 @@ function renderLookupResults(results){
   const d=v=>v?v:'&mdash;';
   const body=results.map(x=>{ if(!x.row) return '<tr class="notfound"><td>'+lkEsc(x.input)+'</td><td colspan="10">NOT FOUND in Billy</td></tr>';
     const r=x.row; const cls=r.status==='Non-Compliant'?'notfound':(r.status==='Expiring Soon'?'warn':'');
-    const wtag=(r.project_status||'').toLowerCase()==='warranty'?'<span class="wtag">Warranty</span>':'';
-    return '<tr class="'+cls+'"><td>'+lkEsc(x.input)+'</td><td>'+lkEsc(r.vendor)+'</td><td>'+lkEsc(r.project)+' '+wtag+'</td><td>'+st(r.status)+'</td><td>'+d(r.cgl_exp)+'</td><td>'+d(r.wc_exp)+'</td><td>'+d(r.auto_exp)+'</td><td>'+d(r.ulel_exp)+'</td><td>'+d(r.prof_exp)+'</td><td>'+d(r.gcl_exp_alabama||r.gcl_exp_billy)+'</td></tr>'; }).join('');
+    const wtag=(r.project_status||'').toLowerCase()==='warranty'?' <span class="wtag">Warranty</span>':'';
+    const gtag=r.global_coi==='Yes'?' <span class="gtag">Global COI</span>':'';
+    return '<tr class="'+cls+'"><td>'+lkEsc(x.input)+'</td><td>'+lkEsc(r.vendor)+gtag+'</td><td>'+lkEsc(r.project)+wtag+'</td><td>'+st(r.status)+'</td><td>'+d(r.cgl_exp)+'</td><td>'+d(r.wc_exp)+'</td><td>'+d(r.auto_exp)+'</td><td>'+d(r.ulel_exp)+'</td><td>'+d(r.prof_exp)+'</td><td>'+d(r.gcl_exp_alabama||r.gcl_exp_billy)+'</td></tr>'; }).join('');
   const nf=results.filter(x=>!x.row).length;
   el.innerHTML=(nf?'<div class="lkmini" style="margin-bottom:6px">'+nf+' of '+results.length+' line(s) not found — check spelling or that the vendor/project is active in Billy.</div>':'')
     +'<table class="lktable"><thead><tr><th>Searched</th><th>Matched Vendor</th><th>Project</th><th>Status</th><th>GL Exp</th><th>WC Exp</th><th>Auto Exp</th><th>UL/EL Exp</th><th>Prof Exp</th><th>GCL Exp</th></tr></thead><tbody>'+body+'</tbody></table>';
 }
 function exportLookup(){
-  const cols=['Searched','Found','Matched Vendor','Project','Warranty','Status','GL Exp','WC Exp','Auto Exp','UL/EL Exp','Prof Exp','GCL Exp'];
+  const cols=['Searched','Found','Matched Vendor','Global COI','Project','Warranty','Status','GL Exp','WC Exp','Auto Exp','UL/EL Exp','Prof Exp','GCL Exp'];
   const wchk=r=>(r.project_status||'').toLowerCase()==='warranty'?'Warranty':'';
-  const data=LOOKUP_RESULTS.map(x=>{ const r=x.row; return r?[x.input,'Yes',r.vendor||'',r.project||'',wchk(r),r.status||'',r.cgl_exp||'',r.wc_exp||'',r.auto_exp||'',r.ulel_exp||'',r.prof_exp||'',r.gcl_exp_alabama||r.gcl_exp_billy||'']:[x.input,'No','','','','NOT FOUND','','','','','','']; });
+  const data=LOOKUP_RESULTS.map(x=>{ const r=x.row; return r?[x.input,'Yes',r.vendor||'',(r.global_coi==='Yes'?'Global':''),r.project||'',wchk(r),r.status||'',r.cgl_exp||'',r.wc_exp||'',r.auto_exp||'',r.ulel_exp||'',r.prof_exp||'',r.gcl_exp_alabama||r.gcl_exp_billy||'']:[x.input,'No','','','','','NOT FOUND','','','','','','']; });
   const aoa=[cols].concat(data);
   const dt=new Date(),pad=n=>String(n).padStart(2,'0'),stamp=dt.getFullYear()+pad(dt.getMonth()+1)+pad(dt.getDate());
-  if(typeof XLSX!=='undefined'){ const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:28},{wch:7},{wch:30},{wch:24},{wch:10},{wch:15},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12}]; ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:aoa.length-1,c:cols.length-1}})}; const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'COI Lookup'); XLSX.writeFile(wb,'COI_Lookup_'+stamp+'.xlsx'); return; }
+  if(typeof XLSX!=='undefined'){ const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:28},{wch:7},{wch:30},{wch:10},{wch:24},{wch:10},{wch:15},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12}]; ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:aoa.length-1,c:cols.length-1}})}; const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'COI Lookup'); XLSX.writeFile(wb,'COI_Lookup_'+stamp+'.xlsx'); return; }
   const cell=v=>{const s=v==null?'':String(v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}; const csv=aoa.map(r=>r.map(cell).join(',')).join('\r\n'); const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='COI_Lookup_'+stamp+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 window.setFilter = function(v){ const el=document.getElementById('filt'); if(el){ el.value=v; render(); el.scrollIntoView({behavior:'smooth',block:'nearest'}); } };
