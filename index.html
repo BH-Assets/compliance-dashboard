@@ -295,7 +295,7 @@ function render(){
     card('ok',c.ok,'Compliant','compliant')+
     card('soon',c.soon,'Expiring Soon','soon')+
     card('bad',c.bad,'Non-Compliant','nc')+
-    `<div class="card gap" style="cursor:pointer" onclick="switchTab('cmgr')" title="Open Compliance Manager — documents to add to Billy from Procore / Alabama"><div class="n">${billyMiss}</div><div class="l">Billy Missing Docs</div></div>`;
+    (ACTIVE_TAB==='cmgr' ? `<div class="card gap" style="cursor:pointer" onclick="switchTab('cmgr','docs')" title="Documents to add to Billy from Procore / Alabama"><div class="n">${billyMiss}</div><div class="l">Billy Missing Docs</div></div>` : '');
   let view=rows;
   if(filt==='nc') view=rows.filter(r=>r.status==='Non-Compliant');
   else if(filt==='compliant') view=rows.filter(r=>r.status==='Compliant');
@@ -437,8 +437,9 @@ function render(){
   sh('valid-title', showDocs); sh('valid', showDocs);
   sh('exportbar', showList);
 }
-function switchTab(name){
+function switchTab(name, sub){
   ACTIVE_TAB=name;
+  if(name==='cmgr' && sub){ CMGR_SUB=sub; document.querySelectorAll('.subtab').forEach(x=>x.classList.toggle('active',x.dataset.sub===sub)); }
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
   const isAcct=name==='acct';
   const o=document.getElementById('tab-ops'), a=document.getElementById('tab-acct');
