@@ -3,13 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="data:image/png;base64,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">
+
 <title>Compliance Dashboard</title>
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: Arial, Helvetica, sans-serif; background:#f5f7fa; color:#1f2733; }
+  body { margin:0; font-family: 'Montserrat', Arial, Helvetica, sans-serif; background:#f5f7fa; color:#211E1E; }
   .wrap { max-width:1300px; margin:0 auto; padding:20px; }
-  h1 { font-size:22px; margin:0 0 2px; color:#1F3864; }
+.bh-header{background:#fff;border-bottom:1px solid #E8E6E7;border-radius:0;padding:12px 6px 14px 2px;display:flex;align-items:center;gap:18px;margin-bottom:18px}
+  .bh-logo{height:64px;width:auto;flex:none}
+  .bh-titles{line-height:1.2}
+  .bh-title{color:#211E1E;font-size:22px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+  .bh-sub{color:#5b6472;font-size:12.5px;margin-top:3px}
+  h1{font-size:22px;margin:0 0 2px;color:#7F1B29}
   .sub { color:#5b6472; font-size:13px; margin-bottom:14px; }
   .banner{background:#fff7e6;border:1px solid #f0d089;color:#7a5a12;padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px}
   .err{background:#FFC7CE;border-color:#e6a3a3;color:#9C0006}
@@ -19,14 +27,14 @@
   .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:12px; margin-bottom:20px; }
   .card { background:#fff; border:1px solid #e3e8f0; border-radius:10px; padding:13px 15px; }
   .card .n { font-size:25px; font-weight:bold; } .card .l { font-size:11.5px; color:#5b6472; margin-top:2px; text-transform:uppercase; letter-spacing:.03em; }
-  .total .n{color:#1F3864} .ok .n{color:#1a7f37} .soon .n{color:#9a6a00} .bad .n{color:#b3261e} .gap .n{color:#1a4fb0}
-  .section-title { font-size:15px; font-weight:bold; color:#1F3864; margin:22px 0 10px; }
+  .total .n{color:#7F1B29} .ok .n{color:#1a7f37} .soon .n{color:#9a6a00} .bad .n{color:#b3261e} .gap .n{color:#1a4fb0}
+  .section-title { font-size:15px; font-weight:bold; color:#7F1B29; margin:22px 0 10px; }
   .tablescroll { overflow-x:auto; border-radius:10px; }
   .scrolltop { overflow-x:auto; overflow-y:hidden; }
   .scrolltop > div { height:1px; }
   table { width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,.04); font-size:12px; }
   th,td { padding:7px 8px; text-align:center; border-bottom:1px solid #eef1f6; white-space:nowrap; }
-  th { background:#2F5496; color:#fff; font-size:11px; position:sticky; top:0; }
+  th { background:#484B4D; color:#fff; font-size:11px; position:sticky; top:0; }
   td.l, th.l { text-align:left; }
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold}
   .g{background:#C6EFCE;color:#006100}.y{background:#FFEB9C;color:#9C6500}.r{background:#FFC7CE;color:#9C0006}.b{background:#DDEBF7;color:#1F3864}.muted{color:#9aa2b1}
@@ -40,14 +48,14 @@
   .empty{color:#5b6472;font-style:italic;padding:10px 0}
   .loading{padding:40px;text-align:center;color:#5b6472}
   .legend{background:#fff;border:1px solid #e3e8f0;border-radius:10px;padding:11px 14px;margin-bottom:16px;font-size:12.5px;line-height:2;color:#40485a}
-  .legend b{color:#1F3864}
+  .legend b{color:#7F1B29}
   .legend .pill{margin:0 2px}
   .legend .grp{display:inline-block;margin-right:18px;white-space:nowrap}
   .vcard{background:#fff;border:1px solid #e3e8f0;border-left:6px solid #1a4fb0;border-radius:10px;padding:11px 15px;margin-bottom:11px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
   .vcard.g{border-left-color:#1a7f37}.vcard.y{border-left-color:#c99a00}.vcard.r{border-left-color:#b3261e}
   .vhead{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-  .vname{font-weight:bold;font-size:14.5px;color:#1f2733}
-  a.vlink{text-decoration:none}a.vlink:hover{color:#2F5496;text-decoration:underline}
+  .vname{font-weight:bold;font-size:14.5px;color:#211E1E}
+  a.vlink{text-decoration:none}a.vlink:hover{color:#ED2B30;text-decoration:underline}
   .vtype{font-size:12px;color:#5b6472}
   .gtag{background:#DDEBF7;color:#1F3864;border:1px solid #b7ccf5;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:bold}
   .wtag{background:#FFE9C7;color:#8a5a00;border:1px solid #f0cf8e;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:bold}
@@ -63,46 +71,47 @@
   .vnotes{margin-top:7px;font-size:11.5px;line-height:1.55;color:#40485a;border-top:1px solid #f0f2f6;padding-top:6px}
   .vact{margin-top:9px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
   .reqwhen{font-size:11px;font-style:italic;color:#8a92a1}
-  .projgrp{margin:18px 0 8px;padding:6px 10px;background:#eef2f8;border-left:4px solid #2F5496;border-radius:4px;font-weight:bold;font-size:13.5px;color:#1f2733;display:flex;align-items:center;gap:8px}
+  .projgrp{margin:18px 0 8px;padding:6px 10px;background:#eef2f8;border-left:4px solid #484B4D;border-radius:4px;font-weight:bold;font-size:13.5px;color:#211E1E;display:flex;align-items:center;gap:8px}
   .projgrp:first-child{margin-top:0}
   .projgrp .cnt{font-weight:normal;font-size:11.5px;color:#6b7480}
   .exportbar{margin:22px 0 8px;text-align:right;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
-  #exportbtn{padding:10px 20px;border:1px solid #1a7f37;background:#1a7f37;color:#fff;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer}
-  #exportbtn:hover{background:#166a2e}
-  .recbtn{padding:10px 20px;border:1px solid #2F5496;background:#2F5496;color:#fff;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer}
-  .recbtn:hover{background:#26467d}
+  #exportbtn{padding:10px 20px;border:1px solid #211E1E;background:#211E1E;color:#fff;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer}
+  #exportbtn:hover{background:#484B4D}
+  .recbtn{padding:10px 20px;border:1px solid #211E1E;background:#211E1E;color:#fff;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer}
+  .recbtn:hover{background:#484B4D}
   .projpick{display:inline-block;vertical-align:top;min-width:250px}
   #projsearch{width:100%;padding:7px 10px;border:1px solid #c7cfdb;border-radius:8px 8px 0 0;font-size:13px;border-bottom:none}
   .projlist-actions{font-size:11px;padding:3px 8px;background:#f1f4f9;border:1px solid #c7cfdb;border-bottom:none}
-  .projlist-actions a{color:#2F5496;text-decoration:none}
+  .projlist-actions a{color:#ED2B30;text-decoration:none}
   .projlist{max-height:150px;overflow-y:auto;border:1px solid #c7cfdb;border-radius:0 0 8px 8px;background:#fff}
   .projopt{display:block;padding:4px 9px;font-size:12.5px;font-weight:normal;cursor:pointer;white-space:nowrap}
   .projopt:hover{background:#eef2f8}
   .projopt input{margin-right:6px;vertical-align:middle}
   .tabbar{display:flex;gap:4px;border-bottom:2px solid #d7deea;margin-bottom:16px}
   .tab{padding:10px 22px;border:none;background:transparent;color:#5b6472;font-size:14px;font-weight:bold;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
-  .tab:hover{color:#2F5496}
-  .tab.active{color:#1F3864;border-bottom-color:#2F5496}
+  .tab:hover{color:#211E1E}
+  .tab.active{color:#211E1E;border-bottom-color:#ED2B30;background:#F2ECE1;border-radius:6px 6px 0 0}
   .subnav{display:flex;gap:8px;margin-bottom:14px}
   .subtab{padding:6px 14px;border:1px solid #c7cfdb;background:#fff;color:#5b6472;border-radius:999px;font-size:12.5px;font-weight:bold;cursor:pointer}
-  .subtab.active{background:#2F5496;border-color:#2F5496;color:#fff}
+  .subtab.active{background:#211E1E;border-color:#211E1E;color:#fff}
   .lookup-help{font-size:12.5px;color:#5b6472;margin-bottom:8px}
   #lookupInput{width:100%;padding:10px 12px;border:1px solid #c7cfdb;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical}
   .lookup-actions{margin:10px 0;display:flex;gap:10px;flex-wrap:wrap}
-  #lookupBtn{padding:9px 18px;border:1px solid #2F5496;background:#2F5496;color:#fff;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer}
-  #lookupExport{padding:9px 18px;border:1px solid #1a7f37;background:#1a7f37;color:#fff;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer}
+  #lookupBtn{padding:9px 18px;border:1px solid #211E1E;background:#211E1E;color:#fff;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer}
+  #lookupExport{padding:9px 18px;border:1px solid #211E1E;background:#211E1E;color:#fff;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer}
+  #lookupExport:hover{background:#484B4D}
   .lktable{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;font-size:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-  .lktable th{background:#2F5496;color:#fff;padding:7px 8px;text-align:left;font-size:11px;white-space:nowrap}
+  .lktable th{background:#484B4D;color:#fff;padding:7px 8px;text-align:left;font-size:11px;white-space:nowrap}
   .lktable td{padding:6px 8px;border-bottom:1px solid #eef1f6;white-space:nowrap}
   .lktable tr.notfound td{background:#FFF3F3;color:#9C0006}
   .lktable tr.warn td{background:#FFF9E9}
   .lkmini{font-size:11px;color:#8a92a1}
-  .reqbtn{display:inline-block;padding:6px 12px;border:1px solid #2F5496;color:#2F5496;background:#fff;border-radius:8px;font-size:12px;font-weight:bold;text-decoration:none}
-  .reqbtn:hover{background:#2F5496;color:#fff}
+  .reqbtn{display:inline-block;padding:6px 12px;border:1px solid #484B4D;color:#484B4D;background:#fff;border-radius:8px;font-size:12px;font-weight:bold;text-decoration:none}
+  .reqbtn:hover{background:#484B4D;color:#fff}
   .reqbtn:disabled{opacity:.45;cursor:not-allowed;border-color:#aab3c0;color:#8a92a1;background:#fff}
   .reqbtn:disabled:hover{background:#fff;color:#8a92a1}
-  .upbtn{display:inline-block;padding:6px 12px;border:1px solid #2e7d32;color:#2e7d32;background:#fff;border-radius:8px;font-size:12px;font-weight:bold;text-decoration:none}
-  .upbtn:hover{background:#2e7d32;color:#fff}
+  .upbtn{display:inline-block;padding:6px 12px;border:1px solid #484B4D;color:#484B4D;background:#fff;border-radius:8px;font-size:12px;font-weight:bold;text-decoration:none}
+  .upbtn:hover{background:#484B4D;color:#fff}
   @media(max-width:640px){
     .wrap{padding:12px}
     h1{font-size:19px}
@@ -122,9 +131,12 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
+<div class="bh-topbar"></div>
 <div class="wrap">
-  <h1>Subcontractor / Vendor Compliance Dashboard</h1>
-  <div class="sub">Bailey Harris Construction &middot; live from Procore + Alabama GCL + Billy, via SharePoint &middot; <span id="asof">loading…</span></div>
+  <header class="bh-header">
+    <img class="bh-logo" src="data:image/png;base64,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" alt="Bailey-Harris Construction">
+    <div class="bh-titles"><div class="bh-title">Compliance Dashboard</div><div class="bh-sub">Subcontractor &amp; Vendor Insurance / License Compliance &middot; <span id="asof">loading…</span></div></div>
+  </header>
   <div id="banner" class="banner" style="display:none"></div>
   <div id="content"><div class="loading">Loading compliance data from SharePoint…</div></div>
   <footer id="foot"></footer>
@@ -244,7 +256,7 @@ function buildUI(){
       <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="nogcl">Missing GC License</option><option value="now9">Missing W-9</option><option value="noins">Missing insurance doc</option></select></span>
       <span id="qwrap"><label style="margin-left:8px">Search vendor:</label>
       <input id="q" type="text" placeholder="type a vendor name…" style="padding:8px 12px;border:1px solid #c7cfdb;border-radius:8px;font-size:14px;min-width:220px"></span>
-      <button id="syncbtn" title="Re-run the pull and refresh the data" style="margin-left:auto;padding:8px 16px;border:1px solid #2F5496;background:#2F5496;color:#fff;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer">↻ Sync now</button>
+      <button id="syncbtn" title="Re-run the pull and refresh the data" style="margin-left:auto;padding:8px 16px;border:1px solid #211E1E;background:#211E1E;color:#fff;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer">↻ Sync now</button>
     </div>
     <div class="cards" id="cards"></div>
     <div class="section-title" id="vendors-title">Vendors</div>
