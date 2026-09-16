@@ -443,10 +443,14 @@ function render(){
   const gclmiss = rows.filter(r=>r.gcl_missing_billy==='Yes');
   const siteUnset = rows.filter(r=>r.site_unclassified==='Yes');
   const newSubChk = rows.filter(r=>r.delivery_rule==='Yes' && /new sub/i.test(r.mgr_reasons||''));
+  const reclassProf = rows.filter(r=>r.reclassified_professional==='Yes');
   const li = arr => arr.map(r=>`<li><b>${r.vendor}</b> <span class="nc-proj">— ${r.project} (${r.project_number||''})</span></li>`).join('');
   const liVal = arr => arr.map(r=>`<li><b>${r.vendor}</b> <span class="nc-proj">— ${r.project} (${r.project_number||''}) · $${Number(r.contract_value||0).toLocaleString()}</span></li>`).join('');
   const gclli = gclmiss.map(r=>`<li><b>${r.vendor}</b> <span class="nc-proj">— ${r.project} (${r.project_number||''})</span> · ${r.gcl_on_alabama==='Yes'?('on Alabama, exp '+(r.gcl_exp_alabama||'?')+' → <b>upload to Billy</b>'):'<b>not found on Alabama → obtain license + upload</b>'}</li>`).join('');
   document.getElementById('valid').innerHTML=
+    `<div class="gap-card"><h4>Reclassified to Professional by commitment prefix <span class="nc-proj">(${reclassProf.length}) — verify Billy requirement group</span></h4>`+
+    `<div class="rsn" style="font-size:12px;margin:2px 0 6px">Billy has these as Subcontractor, but their 1xx (PSA) commitment prefix marks them a professional. Confirm each sits in the correct Billy requirement group so their required coverages are right.</div>`+
+    (reclassProf.length?`<ul class="rsn">${liVal(reclassProf)}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`+
     `<div class="gap-card"><h4>Suppliers with no Procore site type <span class="nc-proj">(${siteUnset.length}) — classify On-Site vs 3rd-Party Delivery in Procore</span></h4>`+
     `<div class="rsn" style="font-size:12px;margin:2px 0 6px">Treated as delivery (coverages n/a) for now. Set the site-type field on their Procore PO so scoring is correct.</div>`+
     (siteUnset.length?`<ul class="rsn">${liVal(siteUnset)}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`+
