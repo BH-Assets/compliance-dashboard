@@ -12,10 +12,12 @@
   * { box-sizing: border-box; }
   body { margin:0; font-family: 'Montserrat', Arial, Helvetica, sans-serif; background:#f5f7fa; color:#211E1E; }
   .wrap { max-width:1300px; margin:0 auto; padding:20px; }
-.bh-header{background:#fff;border-bottom:1px solid #E8E6E7;border-radius:0;padding:12px 6px 14px 2px;display:flex;align-items:center;gap:18px;margin-bottom:18px}
-  .bh-logo{height:64px;width:auto;flex:none}
+.bh-banner{background:#fff;border-bottom:1px solid #E8E6E7;width:100%}
+  .bh-banner-inner{max-width:1300px;margin:0 auto;padding:12px 20px 14px;display:flex;align-items:center;gap:18px}
+  .bh-badge{margin-left:auto;border:1px solid #1a7f37;color:#1a7f37;background:#fff;padding:4px 12px;border-radius:6px;font-size:11px;font-weight:bold;letter-spacing:.05em;white-space:nowrap}
+  .bh-logo{height:54px;width:auto;flex:none}
   .bh-titles{line-height:1.2}
-  .bh-title{color:#211E1E;font-size:22px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+  .bh-title{color:#211E1E;font-size:22px;font-weight:800;letter-spacing:.02em;text-transform:uppercase}
   .bh-sub{color:#5b6472;font-size:12.5px;margin-top:3px}
   h1{font-size:22px;margin:0 0 2px;color:#7F1B29}
   .sub { color:#5b6472; font-size:13px; margin-bottom:14px; }
@@ -132,11 +134,11 @@
 </head>
 <body>
 <div class="bh-topbar"></div>
-<div class="wrap">
-  <header class="bh-header">
+<header class="bh-banner"><div class="bh-banner-inner">
     <img class="bh-logo" src="data:image/png;base64,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" alt="Bailey-Harris Construction">
-    <div class="bh-titles"><div class="bh-title">Compliance Dashboard</div><div class="bh-sub">Subcontractor &amp; Vendor Insurance / License Compliance &middot; <span id="asof">loading…</span></div></div>
-  </header>
+    <div class="bh-titles"><div class="bh-title">Compliance Dashboard</div><div class="bh-sub">Subcontractor &amp; Vendor Insurance / License Compliance &middot; <span id="asof">loading…</span></div></div><span class="bh-badge">&#9679; LIVE</span>
+  </div></header>
+<div class="wrap">
   <div id="banner" class="banner" style="display:none"></div>
   <div id="content"><div class="loading">Loading compliance data from SharePoint…</div></div>
   <footer id="foot"></footer>
@@ -233,14 +235,16 @@ function buildUI(){
     <div id="tab-ops">
     <div id="cmgr-subnav" class="subnav" style="display:none">
       <button class="subtab active" data-sub="vendors">All Vendors</button>
-      <button class="subtab" data-sub="docs">Documents to add to Billy</button>
+      <button class="subtab" data-sub="docs">Action items &amp; docs</button>
     </div>
     <div class="legend">
       <span class="grp"><b>Days to expiration:</b></span>
       <span class="grp"><span class="pill g">30+</span> current</span>
       <span class="grp"><span class="pill y">1&ndash;30</span> expiring soon</span>
       <span class="grp"><span class="muted">waived</span> exempt in Billy</span>
-      <span class="grp"><span class="pill r">expired/missing</span> expired / no coverage on file</span>
+      <span class="grp"><span class="pill r">expired</span> submitted but past expiration</span>
+      <span class="grp"><span class="pill r">not submitted</span> never provided to Billy</span>
+      <span class="grp"><span class="cpill muted">n/a</span> not required (off-site / warranty)</span>
       <span class="grp"><span class="cpill muted">&mdash;</span> not required for this vendor</span>
       <br>
       <span class="grp">GC License required for subs with a Procore commitment &ge; $100k; <span class="pill g" style="font-size:9px">&check;AL</span> = verified on the Alabama GC website. W-9 tracked for all vendors (does not block). Non-Compliant = cannot be on site or paid.</span>
@@ -261,7 +265,7 @@ function buildUI(){
     <div class="cards" id="cards"></div>
     <div class="section-title" id="vendors-title">Vendors</div>
     <div id="list"></div>
-    <div class="section-title" id="valid-title">Documents to add to Billy (from Procore / Alabama)</div><div id="valid"></div>
+    <div class="section-title" id="valid-title">Action items — site types, new-sub checks &amp; docs to add to Billy</div><div id="valid"></div>
     <div class="exportbar" id="exportbar"><button id="recbtn" class="recbtn" title="Download an Excel (.xlsx) of ALL records in view — every vendor with contract dates, compliance status, and tags">⬇ Export Project Records</button><button id="exportbtn" title="Download an Excel (.xlsx) of subcontractors (name, contract amount, GC license # &amp; exp, COI expirations) for the current view">⬇ Export for State Inspector GCL Audit</button></div>
     </div>
     <div id="tab-acct" style="display:none">
@@ -317,7 +321,13 @@ function render(){
   else if(filt==='noins') view=rows.filter(covBad);
   const q=(document.getElementById('q').value||'').trim().toLowerCase();
   if(q) view=view.filter(r=>(r.vendor||'').toLowerCase().includes(q));
-  const typeLabel = r => (r.vendor_type==='Supplier' && r.site_type) ? ('Supplier ('+(r.site_type==='Third Party'?'3rd Party':r.site_type)+')') : (r.vendor_type||'');
+  const typeLabel = r => {
+    if(r.vendor_type!=='Supplier') return r.vendor_type||'';
+    if(r.site_type==='Third-Party Delivery') return 'Supplier (3rd-Party Delivery)';
+    if(r.site_type==='On-Site') return 'Supplier (On-Site)';
+    if(!r.site_type && r.delivery_rule==='Yes') return 'Supplier (site type unset)';
+    return 'Supplier';
+  };
   const noteHtml = n => (n||'').split('; ').map(seg=>{
     if(/verified on Alabama/i.test(seg)) return '<span style="color:#1a7f37">'+seg+'</span>';
     if(/upload|obtain|Missing|Expired|not on file|not in Billy|no Alabama match|not found|W-9 not/i.test(seg)) return '<span style="color:#b3261e">'+seg+'</span>';
@@ -327,9 +337,10 @@ function render(){
     let cell;
     if(v==='n/a') cell='<span class="cpill muted">n/a</span>';
     else if(v==='waived') cell='<span class="cpill muted">waived</span>';
-    else if(v==='missing'||v==='expired') cell='<span class="cpill r">expired/missing</span>';
+    else if(v==='missing') cell='<span class="cpill r">not submitted</span>';
+    else if(v==='unverified') cell='<span class="cpill y">unverified</span>';
     else if(v===''||v==null) cell='<span class="cpill muted">&mdash;</span>';
-    else { const d=Number(v); if(isNaN(d)) cell='<span class="cpill muted">&mdash;</span>'; else if(d<0) cell='<span class="cpill r">expired/missing</span>'; else cell='<span class="cpill '+(d<=THRESHOLD?'y':'g')+'">'+d+'</span>'; }
+    else { const d=Number(v); if(isNaN(d)) cell='<span class="cpill muted">&mdash;</span>'; else if(d<0) cell='<span class="cpill r">expired</span>'; else cell='<span class="cpill '+(d<=THRESHOLD?'y':'g')+'">'+d+'</span>'; }
     const dstr=(exp && v!=='waived' && v!=='n/a')?'<span class="mdate">'+exp+'</span>':'';
     return '<span class="mini"><span class="mlabel">'+label+(extra?(' '+extra):'')+'</span>'+cell+dstr+'</span>';
   }
@@ -429,9 +440,18 @@ function render(){
   // Data validation — items to add to Billy
   const w9miss = rows.filter(r=>r.w9_on_file==='No');
   const gclmiss = rows.filter(r=>r.gcl_missing_billy==='Yes');
+  const siteUnset = rows.filter(r=>r.site_unclassified==='Yes');
+  const newSubChk = rows.filter(r=>r.delivery_rule==='Yes' && /new sub/i.test(r.mgr_reasons||''));
   const li = arr => arr.map(r=>`<li><b>${r.vendor}</b> <span class="nc-proj">— ${r.project} (${r.project_number||''})</span></li>`).join('');
+  const liVal = arr => arr.map(r=>`<li><b>${r.vendor}</b> <span class="nc-proj">— ${r.project} (${r.project_number||''}) · $${Number(r.contract_value||0).toLocaleString()}</span></li>`).join('');
   const gclli = gclmiss.map(r=>`<li><b>${r.vendor}</b> <span class="nc-proj">— ${r.project} (${r.project_number||''})</span> · ${r.gcl_on_alabama==='Yes'?('on Alabama, exp '+(r.gcl_exp_alabama||'?')+' → <b>upload to Billy</b>'):'<b>not found on Alabama → obtain license + upload</b>'}</li>`).join('');
   document.getElementById('valid').innerHTML=
+    `<div class="gap-card"><h4>Suppliers with no Procore site type <span class="nc-proj">(${siteUnset.length}) — classify On-Site vs 3rd-Party Delivery in Procore</span></h4>`+
+    `<div class="rsn" style="font-size:12px;margin:2px 0 6px">Treated as delivery (coverages n/a) for now. Set the site-type field on their Procore PO so scoring is correct.</div>`+
+    (siteUnset.length?`<ul class="rsn">${liVal(siteUnset)}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`+
+    `<div class="gap-card"><h4>Delivery suppliers to verify — possible new sub <span class="nc-proj">(${newSubChk.length}) — under $100k &amp; GL n/a</span></h4>`+
+    `<div class="rsn" style="font-size:12px;margin:2px 0 6px">Off-site delivery suppliers below the $100k GL threshold. Not blocked — confirm none is a new sub you'd still require GL from.</div>`+
+    (newSubChk.length?`<ul class="rsn">${liVal(newSubChk)}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`+
     `<div class="gap-card"><h4>W-9 missing in Billy <span class="nc-proj">(${w9miss.length}) — add from Procore</span></h4>`+
     (w9miss.length?`<ul class="rsn">${li(w9miss)}</ul>`:`<div class="empty">None in view. ✅</div>`)+`</div>`+
     `<div class="gap-card"><h4>GCL not on file in Billy <span class="nc-proj">(${gclmiss.length}) — upload from Alabama/website</span></h4>`+
