@@ -300,7 +300,7 @@ function render(){
   const scope=currentScope();
   const rows=scope.rows, isGlobalView=scope.isGlobalView;
   const covKeys = r => { if((r.project_status||'').toLowerCase()!=='warranty') return ['wc_days','ulel_days','cgl_days','auto_days','prof_days']; return r.vendor_type==='Professional'?['cgl_days','prof_days']:['cgl_days']; };
-  const covBad = r => covKeys(r).some(k=>{const v=r[k]; return v==='missing'||(v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0);});
+  const covBad = r => covKeys(r).some(k=>{const v=r[k]; return v==='missing'||v==='expired'||(v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0);});
   const docsNeeded = r => r.w9_on_file==='No' || r.gcl_missing_billy==='Yes' || covBad(r);
   const c={ok:0,soon:0,bad:0,docs:0};
   rows.forEach(r=>{const s=r.status; if(s==='Compliant')c.ok++;else if(s==='Expiring Soon')c.soon++;else if(s==='Non-Compliant')c.bad++; if(docsNeeded(r))c.docs++;});
@@ -338,6 +338,7 @@ function render(){
     if(v==='n/a') cell='<span class="cpill muted">n/a</span>';
     else if(v==='waived') cell='<span class="cpill muted">waived</span>';
     else if(v==='missing') cell='<span class="cpill r">not submitted</span>';
+    else if(v==='expired') cell='<span class="cpill r">expired</span>';
     else if(v==='unverified') cell='<span class="cpill y">unverified</span>';
     else if(v===''||v==null) cell='<span class="cpill muted">&mdash;</span>';
     else { const d=Number(v); if(isNaN(d)) cell='<span class="cpill muted">&mdash;</span>'; else if(d<0) cell='<span class="cpill r">expired</span>'; else cell='<span class="cpill '+(d<=THRESHOLD?'y':'g')+'">'+d+'</span>'; }
@@ -349,7 +350,7 @@ function render(){
     const out=[];
     [['wc_days','Workers’ Compensation Insurance'],['ulel_days','Excess/Umbrella Liability Insurance'],['cgl_days','Commercial General Liability Insurance'],['auto_days','Commercial Automobile Insurance'],['prof_days','Professional Liability Insurance']].forEach(([k,label])=>{
       const v=r[k];
-      if(v==='missing' || (v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0)) out.push(label);
+      if(v==='missing' || v==='expired' || (v!==''&&v!=='waived'&&!isNaN(Number(v))&&Number(v)<0)) out.push(label);
     });
     if(r.gcl_required==='Yes'){ const g=r.gcl_days;
       if(g==='missing'||(g!==''&&g!=='waived'&&!isNaN(Number(g))&&Number(g)<0)) out.push('General Contractor’s License / Subcontractor’s License'); }
