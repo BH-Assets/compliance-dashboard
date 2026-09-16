@@ -81,12 +81,16 @@
   #exportbtn:hover{background:#484B4D}
   .recbtn{padding:10px 20px;border:1px solid #211E1E;background:#211E1E;color:#fff;border-radius:8px;font-size:14px;font-weight:bold;cursor:pointer}
   .recbtn:hover{background:#484B4D}
-  .projpick{display:inline-block;vertical-align:top;min-width:250px}
-  #projsearch{width:100%;padding:7px 10px;border:1px solid #c7cfdb;border-radius:8px 8px 0 0;font-size:13px;border-bottom:none}
-  .projlist-actions{font-size:11px;padding:3px 8px;background:#f1f4f9;border:1px solid #c7cfdb;border-bottom:none}
+  .projpick{position:relative;display:inline-block;vertical-align:middle}
+  .proj-btn{padding:8px 26px 8px 12px;border:1px solid #c7cfdb;border-radius:8px;background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%235b6472'/></svg>") no-repeat right 10px center;font-size:13px;cursor:pointer;min-width:150px;max-width:230px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .proj-btn:hover{border-color:#9fb0c7}
+  .proj-panel{display:none;position:absolute;z-index:60;top:calc(100% + 4px);left:0;width:240px;background:#fff;border:1px solid #c7cfdb;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14);overflow:hidden}
+  .proj-panel.open{display:block}
+  #projsearch{width:100%;box-sizing:border-box;padding:7px 10px;border:none;border-bottom:1px solid #eef1f6;font-size:13px}
+  .projlist-actions{font-size:11px;padding:5px 9px;background:#f7f9fc;border-bottom:1px solid #eef1f6}
   .projlist-actions a{color:#ED2B30;text-decoration:none}
-  .projlist{max-height:150px;overflow-y:auto;border:1px solid #c7cfdb;border-radius:0 0 8px 8px;background:#fff}
-  .projopt{display:block;padding:4px 9px;font-size:12.5px;font-weight:normal;cursor:pointer;white-space:nowrap}
+  .projlist{max-height:240px;overflow-y:auto;background:#fff}
+  .projopt{display:block;padding:5px 10px;font-size:12.5px;font-weight:normal;cursor:pointer;white-space:nowrap}
   .projopt:hover{background:#eef2f8}
   .projopt input{margin-right:6px;vertical-align:middle}
   .tabbar{display:flex;gap:4px;border-bottom:2px solid #d7deea;margin-bottom:16px}
@@ -250,11 +254,14 @@ function buildUI(){
     </div>
     <div class="controls">
       <span id="projwrap"><label>Projects:</label>
-      <div class="projpick">
-        <input id="projsearch" type="text" placeholder="search projects…" autocomplete="off">
-        <div class="projlist-actions"><a href="#" id="projAll">all</a> &middot; <a href="#" id="projNone">none</a></div>
-        <div id="projlist" class="projlist">${projects.map(p=>`<label class="projopt"><input type="checkbox" class="projcb" value="${p.replace(/"/g,'&quot;')}"> ${p}</label>`).join('')}</div>
-      </div></span>
+      <span class="projpick">
+        <button type="button" id="projBtn" class="proj-btn">All projects</button>
+        <div id="projPanel" class="proj-panel">
+          <div class="projlist-actions"><a href="#" id="projAll">select all</a> &middot; <a href="#" id="projNone">clear</a></div>
+          <input id="projsearch" type="text" placeholder="find a project…" autocomplete="off">
+          <div id="projlist" class="projlist">${projects.map(p=>`<label class="projopt"><input type="checkbox" class="projcb" value="${p.replace(/"/g,'&quot;')}"> ${p}</label>`).join('')}</div>
+        </div>
+      </span></span>
       <span id="filtwrap"><label style="margin-left:8px">Filter:</label>
       <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="nogcl">Missing GC License</option><option value="now9">Missing W-9</option><option value="noins">Missing insurance doc</option></select></span>
       <span id="qwrap"><label style="margin-left:8px">Search vendor:</label>
@@ -276,13 +283,23 @@ function buildUI(){
     </div>`;
   document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
   document.querySelectorAll('.subtab').forEach(b=>b.addEventListener('click',()=>{ CMGR_SUB=b.dataset.sub; document.querySelectorAll('.subtab').forEach(x=>x.classList.toggle('active',x.dataset.sub===CMGR_SUB)); render(); }));
-  // searchable multi-select project picker (Operations)
-  { const cbs=document.querySelectorAll('.projcb'); if(cbs.length) cbs[0].checked=true; }   // default: first project
+  // compact multi-select project picker (Operations) — collapsed dropdown, defaults to ALL
+  { document.querySelectorAll('.projcb').forEach(c=>c.checked=true); }   // default: all projects
+  function updateProjBtn(){
+    const cbs=[...document.querySelectorAll('.projcb')], on=cbs.filter(c=>c.checked);
+    const btn=document.getElementById('projBtn'); if(!btn) return;
+    btn.textContent = on.length===0 ? 'No projects' : on.length===cbs.length ? ('All projects ('+cbs.length+')') : on.length===1 ? on[0].value : (on.length+' of '+cbs.length+' projects');
+  }
+  const projBtn=document.getElementById('projBtn'), projPanel=document.getElementById('projPanel');
+  projBtn.addEventListener('click',e=>{ e.stopPropagation(); projPanel.classList.toggle('open'); });
+  projPanel.addEventListener('click',e=>e.stopPropagation());
+  document.addEventListener('click',()=>projPanel.classList.remove('open'));
   document.getElementById('projsearch').addEventListener('input',function(){ const q=this.value.trim().toLowerCase();
     document.querySelectorAll('#projlist .projopt').forEach(o=>{ o.style.display = o.textContent.toLowerCase().includes(q)?'':'none'; }); });
-  document.getElementById('projlist').addEventListener('change',e=>{ if(e.target.classList.contains('projcb')) render(); });
-  document.getElementById('projAll').addEventListener('click',e=>{ e.preventDefault(); document.querySelectorAll('#projlist .projopt').forEach(o=>{ if(o.style.display!=='none') o.querySelector('.projcb').checked=true; }); render(); });
-  document.getElementById('projNone').addEventListener('click',e=>{ e.preventDefault(); document.querySelectorAll('.projcb').forEach(c=>c.checked=false); render(); });
+  document.getElementById('projlist').addEventListener('change',e=>{ if(e.target.classList.contains('projcb')){ updateProjBtn(); render(); } });
+  document.getElementById('projAll').addEventListener('click',e=>{ e.preventDefault(); document.querySelectorAll('#projlist .projopt').forEach(o=>{ if(o.style.display!=='none') o.querySelector('.projcb').checked=true; }); updateProjBtn(); render(); });
+  document.getElementById('projNone').addEventListener('click',e=>{ e.preventDefault(); document.querySelectorAll('.projcb').forEach(c=>c.checked=false); updateProjBtn(); render(); });
+  updateProjBtn();
   document.getElementById('filt').addEventListener('change',render);
   document.getElementById('q').addEventListener('input',render);
   document.getElementById('syncbtn').addEventListener('click',doSync);
