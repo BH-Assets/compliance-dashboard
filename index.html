@@ -196,8 +196,8 @@ async function getToken(){
 function dcell(v){
   if(v==='waived') return '<td><span class="muted">waived</span></td>';
   if(v==='missing'||v==='expired') return '<td><span class="pill r">&lt;0</span></td>';  // expired / no current coverage
-  if(v===null||v===undefined||v==='') return '<td><span class="muted">&mdash;</span></td>';  // not required
-  const d=Number(v); if(isNaN(d)) return '<td><span class="muted">&mdash;</span></td>';
+  if(v===null||v===undefined||v==='') return '<td><span class="muted">n/a</span></td>';  // not required
+  const d=Number(v); if(isNaN(d)) return '<td><span class="muted">n/a</span></td>';
   if(d<0) return '<td><span class="pill r">&lt;0</span></td>';
   const c=d<=THRESHOLD?'y':'g';
   return `<td><span class="pill ${c}">${d}</span></td>`;
@@ -244,8 +244,7 @@ function buildUI(){
       <span class="grp"><span class="muted">waived</span> exempt in Billy</span>
       <span class="grp"><span class="pill r">expired</span> submitted but past expiration</span>
       <span class="grp"><span class="pill r">not submitted</span> never provided to Billy</span>
-      <span class="grp"><span class="cpill muted">n/a</span> not required (off-site / warranty)</span>
-      <span class="grp"><span class="cpill muted">&mdash;</span> not required for this vendor</span>
+      <span class="grp"><span class="cpill muted">n/a</span> not required for this vendor (off-site / warranty / not in their requirement group)</span>
       <br>
       <span class="grp">GC License required for subs with a Procore commitment &ge; $100k; <span class="pill g" style="font-size:9px">&check;AL</span> = verified on the Alabama GC website. W-9 tracked for all vendors (does not block). Non-Compliant = cannot be on site or paid.</span>
     </div>
@@ -340,8 +339,8 @@ function render(){
     else if(v==='missing') cell='<span class="cpill r">not submitted</span>';
     else if(v==='expired') cell='<span class="cpill r">expired</span>';
     else if(v==='unverified') cell='<span class="cpill y">unverified</span>';
-    else if(v===''||v==null) cell='<span class="cpill muted">&mdash;</span>';
-    else { const d=Number(v); if(isNaN(d)) cell='<span class="cpill muted">&mdash;</span>'; else if(d<0) cell='<span class="cpill r">expired</span>'; else cell='<span class="cpill '+(d<=THRESHOLD?'y':'g')+'">'+d+'</span>'; }
+    else if(v===''||v==null) cell='<span class="cpill muted">n/a</span>';
+    else { const d=Number(v); if(isNaN(d)) cell='<span class="cpill muted">n/a</span>'; else if(d<0) cell='<span class="cpill r">expired</span>'; else cell='<span class="cpill '+(d<=THRESHOLD?'y':'g')+'">'+d+'</span>'; }
     const dstr=(exp && v!=='waived' && v!=='n/a')?'<span class="mdate">'+exp+'</span>':'';
     return '<span class="mini"><span class="mlabel">'+label+(extra?(' '+extra):'')+'</span>'+cell+dstr+'</span>';
   }
