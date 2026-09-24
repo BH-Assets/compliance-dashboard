@@ -380,11 +380,39 @@ function render(){
      view, so an envelope that cannot be tied to an open commitment (a change order, or
      a subject line with no number) has no business appearing on a vendor's card. Those
      are a change-management problem for a later dashboard. */
+  const vKey = v => String(v||'').toLowerCase().replace(/[.,'&]/g,'').replace(/\b(llc|inc|co|corp|company|ltd|lp|llp)\b/g,'').replace(/\s+/g,' ').trim();
   const sigFor = r => {
     if(!SQ || !Array.isArray(SQ.all)) return null;
+    const live = SQ.all.filter(x=>x.with_side!=='nobody' && !isCO(x));
     const c=String(r.commitment||'').trim();
-    if(!c) return null;
-    return SQ.all.find(x=>x.with_side!=='nobody' && !isCO(x) && String(x.commitment||'').trim()===c) || null;
+    if(c){
+      const hit=live.find(x=>String(x.commitment||'').trim()===c);
+      if(hit) return hit;
+    }
+    /* FALLBACK: the envelope names the vendor but not the commitment. Plenty of subject
+       lines carry no number at all ("Final Cleaning - Nicole Lyles"), so the strict
+       commitment match finds nothing and the card goes blank even though DocuSign knows
+       exactly who is holding it.
+
+       Loose matching is what attached a PSA to GL Pack and a change order to Southern
+       Blocking, so this is gated hard rather than merely preferred. It fires ONLY when:
+         - the vendor matches (ignoring LLC/Inc/punctuation), and
+         - the envelope is on this same project, and
+         - the envelope claims no commitment of its own, and
+         - this vendor has exactly ONE commitment out for signature on this project, and
+         - exactly ONE such envelope exists.
+       With one envelope and one open commitment there is no second candidate to get
+       wrong. Any ambiguity at all and it declines rather than guesses. */
+    if(!procoreOut(r)) return null;
+    const vk=vKey(r.vendor), pn=String(r.project_number||'').trim();
+    if(!vk||!pn) return null;
+    const mine=(typeof ROWS!=='undefined'&&Array.isArray(ROWS)?ROWS:[])
+      .filter(z=>String(z.project_number||'').trim()===pn && vKey(z.vendor)===vk && procoreOut(z));
+    if(mine.length!==1) return null;
+    const cands=live.filter(x=>!String(x.commitment||'').trim()
+      && vKey(x.vendor)===vk && String(x.project_number||'').trim()===pn);
+    if(cands.length!==1) return null;
+    return Object.assign({},cands[0],{matched_by:'vendor'});
   };
   /* Executed, and when. The counterpart to "out for signature": between them every
      commitment DocuSign knows about can say where it stands. In flight wins if both
@@ -462,8 +490,13 @@ function render(){
     const days=(x.days_waiting!=null)?(' &middot; '+x.days_waiting+' day'+(x.days_waiting===1?'':'s')):'';
     const sub=x.sub_signed===true ? ' &middot; sub has signed'
             : x.sub_signed===false ? ' &middot; sub not signed yet' : '';
-    return '<div class="vsig'+(x.with_side==='subcontractor'?' sub':'')+'" title="'+esc(x.subject||'')+'">'
-      +'&#9998; <b>Out for signature</b> &mdash; '+side+(who?(' &middot; '+who):'')+days+sub
+    /* An envelope tied by vendor rather than by number says so, quietly. It is the one
+       tier on this card that was inferred, so it should not read as firmly as the rest. */
+    const byV = x.matched_by==='vendor'
+      ? ' <span class="muted" title="This envelope names the vendor and the job but not the commitment number. It is the only one open for this vendor on this job, and this is their only commitment out for signature here, so it can only be this one.">~</span>' : '';
+    const tip = (x.matched_by==='vendor' ? 'Matched by vendor and job, not by commitment number — ' : '')+(x.subject||'');
+    return '<div class="vsig'+(x.with_side==='subcontractor'?' sub':'')+'" title="'+esc(tip)+'">'
+      +'&#9998; <b>Out for signature</b> &mdash; '+side+(who?(' &middot; '+who):'')+days+sub+byV
       +' <a href="'+esc(x.url||'#')+'" target="_blank" rel="noopener">open</a></div>';
   };
 
