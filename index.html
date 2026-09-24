@@ -533,6 +533,14 @@ function queueRows(){
                status:(row&&row.status)||it.status||'', notes:(row&&row.notes)||'',
                commitment:(row&&row.commitment)||it.commitment||'',
                email:(row&&row.vendor_email)||it.vendor_email||'',
+               cstatus:(row&&row.commitment_status)||it.commitment_status||'',
+               cexec:(row&&row.commitment_executed)||it.commitment_executed||'',
+               /* Two different problems wear the same "Non-Compliant" badge: the vendor has
+                  not sent documents, or the commitment itself is still Draft / Out For
+                  Signature / unexecuted so there is nothing for them to submit against.
+                  Chasing the vendor on the second one is the wrong move, and the PM is the
+                  only person who can clear it - so the queue separates them. */
+               blocked:((row&&row.commitment_blocked)||it.commitment_blocked||'')==='Yes',
                orphan:!row });
   }
   out.sort((a,b)=>b.days-a.days||a.project.localeCompare(b.project)||a.vendor.localeCompare(b.vendor));
@@ -557,8 +565,10 @@ function renderQueue(){
   const projects=Object.keys(byProj).sort((a,b)=>
     Math.max(...byProj[b].map(x=>x.days))-Math.max(...byProj[a].map(x=>x.days))||a.localeCompare(b));
   const dayPill=d=>'<span class="pill '+(d>=10?'r':'y')+'">'+d+'</span>';
+  const nBlocked=q.filter(x=>x.blocked).length;
   let html='<div class="gap-card" style="margin-bottom:10px">'
     +'<b>'+q.length+' item'+(q.length===1?'':'s')+' with no movement for 3+ business days</b>'
+    +(nBlocked?(' <span class="pill r">'+nBlocked+' waiting on the contract, not the vendor</span>'):'')
     +' <span class="muted">across '+projects.length+' project'+(projects.length===1?'':'s')+asof+'</span>'
     +' <button id="qcopy" class="recbtn" style="margin-left:10px">&#128203; Copy PM email</button>'
     +'<div class="muted" style="margin-top:6px;font-size:12px">Non-compliant and unverified only. Expiring Soon is not escalated &mdash; those vendors still have valid coverage; find them under All Vendors.</div></div>';
@@ -566,12 +576,15 @@ function renderQueue(){
     const rows=byProj[p];
     html+='<div class="gap-card"><h4>'+esc(p)+' <span class="nc-proj">('+rows.length+')</span></h4>'
       +'<table class="lktable"><thead><tr>'
-      +'<th>Vendor</th><th>Commitment</th><th>Status</th>'
+      +'<th>Vendor</th><th>Commitment</th><th>Contract</th><th>Status</th>'
       +'<th style="white-space:normal">What is outstanding</th><th>Biz days</th><th>Last requested</th>'
       +'</tr></thead><tbody>'
       +rows.map(x=>'<tr>'
         +'<td><b>'+esc(x.vendor)+'</b>'+(x.orphan?' <span class="pill y" title="In the stall file but not in today\'s dataset - the commitment may have closed since the last pull.">stale</span>':'')+'</td>'
         +'<td>'+esc(x.commitment||'—')+'</td>'
+        +'<td>'+(x.cstatus?esc(x.cstatus):'<span class="muted">—</span>')
+              +(x.cexec==='No'?' <span class="pill r" title="Procore shows this commitment as not executed">not executed</span>':'')
+              +(x.blocked?' <span class="pill r">contract not settled</span>':'')+'</td>'
         +'<td>'+stPill(x.status||'')+'</td>'
         +'<td style="white-space:normal">'+esc(x.notes||'—')+'</td>'
         +'<td>'+dayPill(x.days)+'</td>'
@@ -594,13 +607,28 @@ function queueEmailText(){
   t+='The items below have had no movement in Billy for three or more business days. Each one is blocking on-site access and payment for that vendor.\n\n';
   for(const p of projects){
     t+=p+'\n';
-    for(const x of byProj[p].sort((a,b)=>b.days-a.days)){
-      t+='  - '+x.vendor+(x.commitment?(' ('+x.commitment+')'):'')+' — '+x.status
-        +(x.notes?('; '+x.notes):'')+' — '+x.days+' business days unchanged\n';
+    const rows=byProj[p].sort((a,b)=>b.days-a.days);
+    const contractSide=rows.filter(x=>x.blocked), vendorSide=rows.filter(x=>!x.blocked);
+    if(contractSide.length){
+      t+='  Waiting on the commitment (not the vendor):\n';
+      for(const x of contractSide){
+        t+='    - '+x.vendor+(x.commitment?(' ('+x.commitment+')'):'')
+          +' — commitment '+(x.cstatus||'status unknown')+(x.cexec==='No'?', not executed':'')
+          +' — '+x.days+' business days unchanged\n';
+      }
+    }
+    if(vendorSide.length){
+      if(contractSide.length) t+='  Waiting on documents from the vendor:\n';
+      for(const x of vendorSide){
+        t+='    - '+x.vendor+(x.commitment?(' ('+x.commitment+')'):'')+' — '+x.status
+          +(x.notes?('; '+x.notes):'')+' — '+x.days+' business days unchanged\n';
+      }
     }
     t+='\n';
   }
-  t+='If any of these are waiting on a waiver decision or the commitment has not been approved or executed yet, let me know and I will note it.\n';
+  // Only say the contract line when there is actually something in that bucket.
+  if(q.some(x=>x.blocked)) t+='Items listed as waiting on the commitment cannot be cleared by the subcontractor — the contract needs approving or executing in Procore first.\n';
+  t+='If any of these are waiting on a waiver decision, let me know and I will note it.\n';
   return t;
 }
 function copyQueueEmail(btn){
