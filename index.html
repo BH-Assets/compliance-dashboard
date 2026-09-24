@@ -300,7 +300,7 @@ function buildUI(){
         </div>
       </span></span>
       <span id="filtwrap"><label style="margin-left:8px">Filter:</label>
-      <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="nogcl">Missing GC License</option><option value="now9">Missing W-9</option><option value="noins">Missing insurance doc</option></select></span>
+      <select id="filt"><option value="all">All vendors</option><option value="compliant">Compliant</option><option value="soon">Expiring soon</option><option value="nc">Non-compliant</option><option value="nogcl">Missing GC License</option><option value="now9">Missing W-9</option><option value="noins">Missing insurance doc</option><option value="outsig">Out for signature</option></select></span>
       <span id="qwrap"><label style="margin-left:8px">Search vendor:</label>
       <input id="q" type="text" placeholder="type a vendor name…" style="padding:8px 12px;border:1px solid #c7cfdb;border-radius:8px;font-size:14px;min-width:220px"></span>
       <button id="syncbtn" title="Re-run the pull and refresh the data" style="margin-left:auto;padding:8px 16px;border:1px solid #211E1E;background:#211E1E;color:#fff;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer">↻ Sync now</button>
@@ -359,13 +359,59 @@ function render(){
   const docsNeeded = r => r.w9_on_file==='No' || r.gcl_missing_billy==='Yes' || covBad(r);
   const c={ok:0,soon:0,bad:0,docs:0};
   rows.forEach(r=>{const s=r.status; if(s==='Compliant')c.ok++;else if(s==='Expiring Soon')c.soon++;else if(s==='Non-Compliant')c.bad++; if(docsNeeded(r))c.docs++;});
+  const isOutForSig = r => !!sigFor(r);
+  /* The envelope out for signature against THIS commitment, if there is one.
+     Matched on the commitment number only — the compliance dashboard is a commitment
+     view, so an envelope that cannot be tied to an open commitment (a change order, or
+     a subject line with no number) has no business appearing on a vendor's card. Those
+     are a change-management problem for a later dashboard. */
+  const sigFor = r => {
+    if(!SQ || !Array.isArray(SQ.all)) return null;
+    const c=String(r.commitment||'').trim();
+    if(!c) return null;
+    return SQ.all.find(x=>x.with_side!=='nobody' && String(x.commitment||'').trim()===c) || null;
+  };
+  /* Executed, and when. The counterpart to "out for signature": between them every
+     commitment DocuSign knows about can say where it stands. In flight wins if both
+     exist — a new envelope against a commitment supersedes an older execution. */
+  const execFor = r => {
+    if(!SQ || !Array.isArray(SQ.executed)) return null;
+    const c=String(r.commitment||'').trim(); if(!c) return null;
+    return SQ.executed.find(x=>String(x.commitment||'').trim()===c) || null;
+  };
+  const fmtDate = d => { if(!d) return ''; const t=new Date(d+'T00:00:00');
+    return isNaN(t)?esc(d):t.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); };
+  const sigLine = r => {
+    const x=sigFor(r);
+    if(!x){
+      const e=execFor(r);
+      if(e) return '<div class="vsig done" title="'+esc(e.subject||'')+'">'
+        +'&#10003; <b>Executed via DocuSign</b>'+(e.completed_at?(' &mdash; '+fmtDate(e.completed_at)):'')
+        +' <a href="'+esc(e.url||'#')+'" target="_blank" rel="noopener">open</a></div>';
+      return '';
+    }
+    const who=x.with_names&&x.with_names.length?x.with_names.map(esc).join(', '):'';
+    const side=x.with_side==='subcontractor' ? 'with the sub' : (x.with_side==='both' ? 'with both sides' : 'with us');
+    const days=(x.days_waiting!=null)?(' &middot; '+x.days_waiting+' day'+(x.days_waiting===1?'':'s')):'';
+    const sub=x.sub_signed===true ? ' &middot; sub has signed'
+            : x.sub_signed===false ? ' &middot; sub not signed yet' : '';
+    return '<div class="vsig'+(x.with_side==='subcontractor'?' sub':'')+'" title="'+esc(x.subject||'')+'">'
+      +'&#9998; <b>Out for signature</b> &mdash; '+side+(who?(' &middot; '+who):'')+days+sub
+      +' <a href="'+esc(x.url||'#')+'" target="_blank" rel="noopener">open</a></div>';
+  };
+
   const card=(cls,n,label,f)=>`<div class="card ${cls}" style="cursor:pointer" onclick="setFilter('${f}')" title="Click to filter"><div class="n">${n}</div><div class="l">${label}</div></div>`;
   const billyMiss = rows.filter(r=>r.w9_on_file==='No').length + rows.filter(r=>r.gcl_missing_billy==='Yes').length;
+  const outSigCount = rows.filter(isOutForSig).length;
   document.getElementById('cards').innerHTML=
     card('total',rows.length,'Vendors','all')+
     card('ok',c.ok,'Compliant','compliant')+
     card('soon',c.soon,'Expiring Soon','soon')+
     card('bad',c.bad,'Non-Compliant','nc')+
+    /* Out for signature, counted over the SAME rows the other cards count — the current
+       project selection — so it filters in step with them. Only commitment-matched
+       envelopes count, the same rule the cards themselves use. */
+    (outSigCount ? card('soon',outSigCount,'Out for Signature','outsig') : '')+
     (ACTIVE_TAB==='cmgr' ? `<div class="card gap" style="cursor:pointer" onclick="switchTab('cmgr','docs')" title="Documents to add to Billy from Procore / Alabama"><div class="n">${billyMiss}</div><div class="l">Billy Missing Docs</div></div>` : '');
   let view=rows;
   if(filt==='nc') view=rows.filter(r=>r.status==='Non-Compliant');
@@ -374,6 +420,7 @@ function render(){
   else if(filt==='nogcl') view=rows.filter(r=>r.gcl_required==='Yes' && (r.gcl_days==='missing' || (r.gcl_days!==''&&r.gcl_days!=='waived'&&!isNaN(Number(r.gcl_days))&&Number(r.gcl_days)<0)));
   else if(filt==='now9') view=rows.filter(r=>r.w9_on_file==='No');
   else if(filt==='noins') view=rows.filter(covBad);
+  else if(filt==='outsig') view=rows.filter(isOutForSig);
   const q=(document.getElementById('q').value||'').trim().toLowerCase();
   if(q) view=view.filter(r=>(r.vendor||'').toLowerCase().includes(q));
   const typeLabel = r => {
@@ -458,46 +505,6 @@ function render(){
       +'<span class="pn">'+esc(p.number||'—')+'</span>'+esc(p.project||'')
       +(p.warranty?' ⚠':'')+'</span>';
   }).join('');
-
-  /* The envelope out for signature against THIS commitment, if there is one.
-     Matched on the commitment number only — the compliance dashboard is a commitment
-     view, so an envelope that cannot be tied to an open commitment (a change order, or
-     a subject line with no number) has no business appearing on a vendor's card. Those
-     are a change-management problem for a later dashboard. */
-  const sigFor = r => {
-    if(!SQ || !Array.isArray(SQ.all)) return null;
-    const c=String(r.commitment||'').trim();
-    if(!c) return null;
-    return SQ.all.find(x=>x.with_side!=='nobody' && String(x.commitment||'').trim()===c) || null;
-  };
-  /* Executed, and when. The counterpart to "out for signature": between them every
-     commitment DocuSign knows about can say where it stands. In flight wins if both
-     exist — a new envelope against a commitment supersedes an older execution. */
-  const execFor = r => {
-    if(!SQ || !Array.isArray(SQ.executed)) return null;
-    const c=String(r.commitment||'').trim(); if(!c) return null;
-    return SQ.executed.find(x=>String(x.commitment||'').trim()===c) || null;
-  };
-  const fmtDate = d => { if(!d) return ''; const t=new Date(d+'T00:00:00');
-    return isNaN(t)?esc(d):t.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); };
-  const sigLine = r => {
-    const x=sigFor(r);
-    if(!x){
-      const e=execFor(r);
-      if(e) return '<div class="vsig done" title="'+esc(e.subject||'')+'">'
-        +'&#10003; <b>Executed via DocuSign</b>'+(e.completed_at?(' &mdash; '+fmtDate(e.completed_at)):'')
-        +' <a href="'+esc(e.url||'#')+'" target="_blank" rel="noopener">open</a></div>';
-      return '';
-    }
-    const who=x.with_names&&x.with_names.length?x.with_names.map(esc).join(', '):'';
-    const side=x.with_side==='subcontractor' ? 'with the sub' : (x.with_side==='both' ? 'with both sides' : 'with us');
-    const days=(x.days_waiting!=null)?(' &middot; '+x.days_waiting+' day'+(x.days_waiting===1?'':'s')):'';
-    const sub=x.sub_signed===true ? ' &middot; sub has signed'
-            : x.sub_signed===false ? ' &middot; sub not signed yet' : '';
-    return '<div class="vsig'+(x.with_side==='subcontractor'?' sub':'')+'" title="'+esc(x.subject||'')+'">'
-      +'&#9998; <b>Out for signature</b> &mdash; '+side+(who?(' &middot; '+who):'')+days+sub
-      +' <a href="'+esc(x.url||'#')+'" target="_blank" rel="noopener">open</a></div>';
-  };
 
   const vcard = (r, globalView) => {
     const cls = r.status==='Compliant'?'g':(r.status==='Expiring Soon'?'y':'r');
