@@ -55,6 +55,11 @@
   .legend .grp{display:inline-block;margin-right:18px;white-space:nowrap}
   .vcard{background:#fff;border:1px solid #e3e8f0;border-left:6px solid #1a4fb0;border-radius:10px;padding:11px 15px;margin-bottom:11px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
   .vcard.g{border-left-color:#1a7f37}.vcard.y{border-left-color:#c99a00}.vcard.r{border-left-color:#b3261e}
+  .vprojs{margin:5px 0 2px;font-size:11px;color:#484B4D;line-height:1.9}
+  .vprojs .lbl{color:#7a828f;margin-right:4px}
+  .pchip{display:inline-block;background:#eef3fb;border:1px solid #c3d4ee;color:#1F3864;border-radius:10px;padding:1px 8px;margin:0 4px 3px 0;white-space:nowrap}
+  .pchip.w{background:#FFF7E9;border-color:#f0cf8e;color:#8a5a00}
+  .pchip .pn{font-weight:700;margin-right:4px}
   .vhead{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
   .vname{font-weight:bold;font-size:14.5px;color:#211E1E}
   a.vlink{text-decoration:none}a.vlink:hover{color:#ED2B30;text-decoration:underline}
@@ -299,6 +304,7 @@ function buildUI(){
     <div class="cards" id="cards"></div>
     <div class="section-title" id="vendors-title">Vendors</div>
     <div id="list"></div>
+    <div class="section-title" id="sig-title">Contracts out for signature</div><div id="sigops"></div>
     <div class="section-title" id="queue-title">Review queue</div><div id="queue"></div>
     <div class="section-title" id="untracked-title">In Procore, not tracked in Billy</div><div id="untracked"></div>
     <div class="section-title" id="valid-title">Action items — site types, new-sub checks &amp; docs to add to Billy</div><div id="valid"></div>
@@ -425,6 +431,31 @@ function render(){
     const body='Dear '+r.vendor+',\n\n'+intro+'\n\n'+items.map(i=>'  • '+i).join('\n')+'\n\nPlease note: copies of the actual policy endorsements are also required to confirm the coverage is in force. A Certificate of Insurance (COI) is informational only and does not by itself prove that coverage exists.'+uploadLine+'\n\nPlease send the updated documentation at your earliest convenience so we can keep your account current for on-site access and payment.'+faqBlock+'\n\nThank you,\nBailey-Harris Construction';
     return 'mailto:'+encodeURIComponent(r.vendor_email||'')+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
   };
+  /* Every current project this vendor holds a live contract on. The global view dedupes
+     ROWS to one card per vendor, which is what makes the tab readable and also what
+     throws the project list away — so it is rebuilt here from the full row set. */
+  const vendorProjects = r => {
+    const key = r.vendor_id || r.vendor;
+    const seen = new Set(), out = [];
+    for(const x of ROWS){
+      if((x.vendor_id||x.vendor) !== key) continue;
+      const k = String(x.project_number || x.project || '');
+      if(!k || seen.has(k)) continue; seen.add(k);
+      out.push({ project:x.project||'', number:x.project_number||'',
+                 commitment:x.commitment||'', value:Number(x.contract_value||0),
+                 warranty:(x.project_status||'').toLowerCase()==='warranty' });
+    }
+    out.sort((a,b)=>String(a.number).localeCompare(String(b.number))||a.project.localeCompare(b.project));
+    return out;
+  };
+  const projChips = list => list.map(p=>{
+    const tip = [p.project, p.commitment?('commitment '+p.commitment):'', p.value?('$'+p.value.toLocaleString()):'', p.warranty?'warranty period':'']
+                  .filter(Boolean).join(' · ');
+    return '<span class="pchip'+(p.warranty?' w':'')+'" title="'+esc(tip)+'">'
+      +'<span class="pn">'+esc(p.number||'—')+'</span>'+esc(p.project||'')
+      +(p.warranty?' ⚠':'')+'</span>';
+  }).join('');
+
   const vcard = (r, globalView) => {
     const cls = r.status==='Compliant'?'g':(r.status==='Expiring Soon'?'y':'r');
     const alTag = r.gcl_on_alabama==='Yes'?'<span class="cpill g" style="font-size:9px">✓AL</span>':'';
@@ -445,6 +476,11 @@ function render(){
       +(r.contract_active==='No'?'<span class="itag" title="Contract is inactive in Billy (e.g., a closed/completed PO on a warranty job)">Inactive</span>':'')
       +'<span class="vright">On-Site/Pay '+okChip(r.on_site_ok)+' '+stPill(r.status)+'</span></div>'
       +'<div class="vsub">'+(globalView ? 'Company directory &middot; Global blanket COI (applies to all projects)' : ((r.project||'')+' &middot; '+(r.project_number||'')+' &middot; '+(r.commitment||'')+' &middot; $'+Number(r.contract_value||0).toLocaleString()))+'</div>'
+      +(globalView ? (()=>{
+          const ps=vendorProjects(r);
+          if(!ps.length) return '<div class="vprojs"><span class="lbl">Current projects:</span> <span class="muted">none found in this pull &mdash; the blanket COI is on file but no active contract matched</span></div>';
+          return '<div class="vprojs"><span class="lbl">On '+ps.length+' current project'+(ps.length===1?'':'s')+':</span> '+projChips(ps)+'</div>';
+        })() : '')
       +'<div class="vcov">'+cov+'</div>'
       +(r.notes?'<div class="vnotes">'+noteHtml(r.notes)+'</div>':'')
       +((()=>{
@@ -525,6 +561,11 @@ function render(){
   sh('filtwrap', showList); sh('qwrap', showList);
   sh('cards', showList); sh('vendors-title', showList); sh('list', showList);
   sh('valid-title', showDocs); sh('valid', showDocs);
+  /* Visible wherever the vendor list is — Operations for the PMs on their own jobs,
+     Compliance Manager for the whole portfolio. Scoped to the same project selection,
+     so a PM sees their jobs and nobody else's. */
+  sh('sig-title', showList); sh('sigops', showList);
+  if(showList) renderSigOps(scope);
   sh('exportbar', showList);
 }
 const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -731,6 +772,65 @@ function selfPerformHtml(){
   return '<div class="gap-card" style="margin-top:14px"><h4>Self-perform '
     +'<span class="nc-proj">('+SELF_PERFORM.length+' &middot; $'+Math.round(tot).toLocaleString()+')</span></h4>'
     +'<div class="muted" style="font-size:12px">Our own divisions. No Billy contract is expected and none is missing &mdash; listed only so the counts above reconcile against Procore.</div></div>';
+}
+/* ---------------- CONTRACTS OUT FOR SIGNATURE (Operations view) -------------
+   Procore says a commitment is "Out For Signature"; it cannot say whose signature.
+   DocuSign can, so this pairs the two: the Procore status of the commitment and the
+   person actually holding the envelope right now. Written for a PM or an exec — the
+   question is not "is it signed" but "who do I chase". */
+function renderSigOps(scope){
+  const el=document.getElementById('sigops'); if(!el) return;
+  if(!SQ||!Array.isArray(SQ.all)){
+    el.innerHTML='<div class="empty">No signature data yet. <b>signature_queue.json</b> is written by '
+      +'<b>docusign_pull.js</b>; if it exists but this stays empty, it predates the all-envelopes view '
+      +'&mdash; re-run that workflow.</div>';
+    return;
+  }
+  /* Same project scope as the vendor list above it. */
+  const nums=new Set((scope.rows||[]).map(r=>String(r.project_number||'')).filter(Boolean));
+  const names=new Set((scope.rows||[]).map(r=>String(r.project||'')).filter(Boolean));
+  let list=SQ.all.filter(x=>x.with_side!=='nobody');
+  /* Scope differs by audience. A PM on their own jobs wants only those jobs, and an
+     envelope that could not be tied to a job is noise to them. The Compliance Manager
+     view is the whole portfolio, and there an unplaceable envelope is precisely what
+     needs looking at — so it is kept, and sorted to the end. */
+  const portfolio = ACTIVE_TAB==='cmgr' || scope.isGlobalView;
+  if(!portfolio && nums.size)
+    list=list.filter(x=>nums.has(String(x.project_number||''))||names.has(String(x.project||'')));
+  const unplaced=portfolio?list.filter(x=>!x.project_number).length:0;
+  if(portfolio) list=list.slice().sort((a,b)=>
+    (a.project_number?0:1)-(b.project_number?0:1) || (b.days_waiting??-1)-(a.days_waiting??-1));
+  const asof=SQ.generated_at?(' &middot; as of '+new Date(SQ.generated_at).toLocaleString()):'';
+  if(!list.length){
+    el.innerHTML='<div class="empty">Nothing out for signature on '+(nums.size>1?'these jobs':'this job')+'. ✅<span class="muted">'+asof+'</span></div>';
+    return;
+  }
+  const dayPill=d=>d==null?'<span class="muted">—</span>':'<span class="pill '+(d>=14?'r':d>=7?'y':'g')+'">'+d+'</span>';
+  const withCell=x=>{
+    const who=x.with_names.length?x.with_names.map(esc).join(', '):'—';
+    if(x.with_side==='us')           return '<span class="pill y" title="Waiting on Bailey-Harris">with us</span> '+who;
+    if(x.with_side==='subcontractor')return '<span class="pill b" title="Waiting on the subcontractor">with the sub</span> '+who;
+    return '<span class="pill y">with both</span> '+who;
+  };
+  const ours=list.filter(x=>x.with_side!=='subcontractor').length;
+  el.innerHTML='<div class="gap-card" style="margin-bottom:10px"><b>'+list.length+' contract'+(list.length===1?'':'s')+' out for signature</b>'
+    +(ours?(' <span class="pill y">'+ours+' waiting on us</span>'):'')
+    +(unplaced?(' <span class="pill r" title="In flight but not tied to a commitment — check the subject line carries the commitment number">'+unplaced+' not tied to a job</span>'):'')
+    +' <span class="muted">'+asof+'</span>'
+    +'<div class="muted" style="margin-top:6px;font-size:12px">&ldquo;With&rdquo; is who holds the envelope right now &mdash; reached in the routing order and not yet signed.</div></div>'
+    +'<div class="gap-card"><table class="lktable"><thead><tr>'
+    +'<th>Job</th><th>Vendor</th><th>Document</th><th>With</th><th>Days</th><th>Sub signed</th><th>Compliance</th><th>Link</th>'
+    +'</tr></thead><tbody>'
+    +list.map(x=>{
+      const job=x.project?('<b>'+esc(x.project_number||'')+'</b> '+esc(x.project)):'<span class="muted" title="'+esc(x.match||'')+'">not identified</span>';
+      const sub=x.sub_signed===true?'<span class="pill g">yes</span>':x.sub_signed===false?'<span class="pill y">not yet</span>':'<span class="muted">—</span>';
+      const comp=x.compliance_status?stPill(x.compliance_status):'<span class="muted" title="Commitment not identified, so no compliance status can be attached">—</span>';
+      return '<tr><td>'+job+'</td><td><b>'+esc(x.vendor||'—')+'</b></td>'
+        +'<td style="white-space:normal">'+esc(x.subject||'—')+'</td>'
+        +'<td style="white-space:normal">'+withCell(x)+'</td>'
+        +'<td>'+dayPill(x.days_waiting)+'</td><td>'+sub+'</td><td>'+comp+'</td>'
+        +'<td><a href="'+esc(x.url||'#')+'" target="_blank" rel="noopener">open</a></td></tr>';
+    }).join('')+'</tbody></table></div>';
 }
 function renderQueue(){
   const el=document.getElementById('queue'); if(!el) return;
