@@ -432,6 +432,19 @@ function render(){
         : 'Procore says this commitment is executed but neither system holds a date';
       return '<div class="vsig done" title="'+esc(src)+'">&#10003; <b>Executed</b> '+when+staleFlag(r)+still+'</div>';
     }
+    /* 1b. Procore's own signature record. It names the holder and is keyed to the
+       commitment by Procore itself, so it beats any envelope we matched from a subject
+       line - that matching is what attached a change order to Southern Blocking and a
+       PSA to the wrong job. Days are measured from when Procore sent it. */
+    if(r.esig_ball_in_court){
+      const sent=String(r.esig_sent_date||'');
+      const d=sent?Math.floor((Date.now()-Date.parse(sent+'T00:00:00'))/86400000):null;
+      const link=r.esig_url?(' <a href="'+esc(r.esig_url)+'" target="_blank" rel="noopener">open</a>'):'';
+      return '<div class="vsig" title="Named by Procore on the commitment'
+        +(r.esig_synced_date?(' - last synced with DocuSign '+fmtDate(r.esig_synced_date)):'')+'">'
+        +'&#9998; <b>Out for signature</b> &mdash; with '+esc(r.esig_ball_in_court)
+        +(d!=null?(' &middot; '+d+' day'+(d===1?'':'s')):'')+link+'</div>';
+    }
     if(!x){
       // 2. A completed DocuSign envelope, where Procore has not recorded execution.
       const e=execFor(r);
@@ -441,7 +454,7 @@ function render(){
         +(procoreOut(r)?stalePill('Completed in DocuSign'):'')+'</div>';
       // 3. Not executed anywhere: the status is all we have.
       if(procoreOut(r)) return '<div class="vsig">&#9998; <b>Out for signature</b> '
-        +'<span class="muted">(Procore; no DocuSign envelope matched, so no signer name)</span></div>';
+        +'<span class="muted" title="Procore holds no signature record for this commitment and no DocuSign envelope matched it">(no signer name)</span></div>';
       return '';
     }
     const who=x.with_names&&x.with_names.length?x.with_names.map(esc).join(', '):'';
