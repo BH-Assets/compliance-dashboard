@@ -622,7 +622,12 @@ function renderReview(){
    License requirement turns on $100k, so a small contract can be waived rather
    than chased. */
 function renderSign(){
-  if(!SQ) return '';
+  /* An absent file, an undeployed workflow and a genuinely empty queue must not all
+     render as blank space — that is how a broken feed gets mistaken for good news. */
+  if(!SQ) return '<div class="gap-card"><h4>In your court to sign</h4><div class="empty">'
+    +'No signature data yet. <b>signature_queue.json</b> is written by <b>docusign_pull.js</b>, '
+    +'and that workflow writes nothing while <b>dry_run</b> is set to 1 — clear it and re-run, '
+    +'then reload this page.</div></div>';
   const items=(SQ.items||[]);
   const asof=SQ.generated_at?(' &middot; as of '+new Date(SQ.generated_at).toLocaleString()):'';
   if(!items.length) return '<div class="gap-card"><h4>In your court to sign</h4><div class="empty">Nothing is waiting on your signature. ✅<span class="muted">'+asof+'</span></div></div>';
