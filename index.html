@@ -404,6 +404,24 @@ function render(){
        With one envelope and one open commitment there is no second candidate to get
        wrong. Any ambiguity at all and it declines rather than guesses. */
     if(!procoreOut(r)) return null;
+    /* TIER 3: the envelope subject IS the commitment title. Procore's send template uses
+       the title verbatim, so "Final Cleaning" is a whole subject line with no vendor and
+       no number in it - unmatchable by every earlier rule. Gated the same way: the title
+       must identify exactly one commitment out for signature anywhere in the dataset, and
+       exactly one unmatched envelope must carry it. A title as generic as "Final Cleaning"
+       is only safe BECAUSE of that uniqueness test - two jobs buying final cleaning at the
+       same moment makes it ambiguous, and then it declines. */
+    const tKey = t => String(t||'').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
+    const myTitle=tKey(r.commitment_title);
+    if(myTitle){
+      const sameTitle=(typeof ROWS!=='undefined'&&Array.isArray(ROWS)?ROWS:[])
+        .filter(z=>tKey(z.commitment_title)===myTitle && procoreOut(z)
+          && !(z.commitment_executed==='Yes'||String(z.commitment_execution_date||'').trim()));
+      if(sameTitle.length===1 && String(sameTitle[0].commitment||'')===String(r.commitment||'')){
+        const tc=live.filter(x=>!String(x.commitment||'').trim() && tKey(x.subject)===myTitle);
+        if(tc.length===1) return Object.assign({},tc[0],{matched_by:'title'});
+      }
+    }
     const vk=vKey(r.vendor), pn=String(r.project_number||'').trim();
     if(!vk||!pn) return null;
     const mine=(typeof ROWS!=='undefined'&&Array.isArray(ROWS)?ROWS:[])
@@ -492,9 +510,13 @@ function render(){
             : x.sub_signed===false ? ' &middot; sub not signed yet' : '';
     /* An envelope tied by vendor rather than by number says so, quietly. It is the one
        tier on this card that was inferred, so it should not read as firmly as the rest. */
-    const byV = x.matched_by==='vendor'
-      ? ' <span class="muted" title="This envelope names the vendor and the job but not the commitment number. It is the only one open for this vendor on this job, and this is their only commitment out for signature here, so it can only be this one.">~</span>' : '';
-    const tip = (x.matched_by==='vendor' ? 'Matched by vendor and job, not by commitment number — ' : '')+(x.subject||'');
+    const byV = x.matched_by
+      ? ' <span class="muted" title="'+(x.matched_by==='title'
+          ? 'The envelope subject is this commitment\'s title. It is the only commitment with that title out for signature, and the only unmatched envelope carrying it.'
+          : 'This envelope names the vendor and the job but not the commitment number. It is the only one open for this vendor on this job, and their only commitment out for signature here.')
+        +'">~</span>' : '';
+    const tip = (x.matched_by==='title' ? 'Matched on the commitment title, not a number — '
+               : x.matched_by==='vendor' ? 'Matched by vendor and job, not by commitment number — ' : '')+(x.subject||'');
     return '<div class="vsig'+(x.with_side==='subcontractor'?' sub':'')+'" title="'+esc(tip)+'">'
       +'&#9998; <b>Out for signature</b> &mdash; '+side+(who?(' &middot; '+who):'')+days+sub+byV
       +' <a href="'+esc(x.url||'#')+'" target="_blank" rel="noopener">open</a></div>';
