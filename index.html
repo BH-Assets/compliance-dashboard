@@ -181,6 +181,8 @@ let ACTIVE_TAB='ops';  // ops | global | cmgr | acct
 let CMGR_SUB='vendors';  // Compliance Manager sub-view: queue | vendors | docs
 let STATE=null;          // compliance_state.json - per-row stall clock written by compliance_pull.js
 let RQ=null;             // review_queue.json - documents uploaded to Billy but not yet reviewed
+let SQ=null;             // signature_queue.json - DocuSign envelopes waiting on her signature
+let UNTRACKED=[];        // Procore commitments with no Billy contract behind them
 let LR_MAP={};  // shared last-requested map from the Worker (KV), keyed like reqKey()
 function effLastReq(r){ const k=reqKey(r); return [r.last_requested||'', localLastReq(k), LR_MAP[k]||''].sort().slice(-1)[0]; }  // newest wins (ISO sorts chronologically)
 let ROWS = [], GENERATED = '';
@@ -219,7 +221,7 @@ async function load(){
     if(!res.ok) throw new Error('Graph HTTP '+res.status+' (need SharePoint access to the file)');
     const data = await res.json();
     if (!data || !Array.isArray(data.rows)) throw new Error('Unexpected data shape');
-    ROWS = data.rows; GENERATED = data.generated_at || '';
+    ROWS = data.rows; GENERATED = data.generated_at || ''; UNTRACKED = data.untracked || [];
     document.getElementById('asof').textContent = GENERATED ? ('data as of ' + new Date(GENERATED).toLocaleString()) : '';
     await loadLastReqMap(token);   // shared "last requested" (company-level not readable from Billy's API)
     /* Stall clock. compliance_data.json says what is wrong today; it cannot say how long
@@ -237,6 +239,10 @@ async function load(){
       const rr=await fetch('https://graph.microsoft.com/v1.0/drives/'+DRIVE_ID+'/root:/'+encodeURI('Compliance Dashboard/review_queue.json')+':/content',{headers:{Authorization:'Bearer '+token}});
       if(rr.ok) RQ=await rr.json();
     }catch(e){ RQ=null; }
+    try{
+      const sq=await fetch('https://graph.microsoft.com/v1.0/drives/'+DRIVE_ID+'/root:/'+encodeURI('Compliance Dashboard/signature_queue.json')+':/content',{headers:{Authorization:'Bearer '+token}});
+      if(sq.ok) SQ=await sq.json();
+    }catch(e){ SQ=null; }
     buildUI();
   }catch(e){
     const b=document.getElementById('banner'); b.style.display='block'; b.className='banner err';
@@ -258,6 +264,7 @@ function buildUI(){
       <button class="subtab" data-sub="queue">Review queue</button>
       <button class="subtab active" data-sub="vendors">All Vendors</button>
       <button class="subtab" data-sub="docs">Action items &amp; docs</button>
+      <button class="subtab" data-sub="untracked">Not in Billy</button>
     </div>
     <div class="legend">
       <span class="grp"><b>Days to expiration:</b></span>
@@ -290,6 +297,7 @@ function buildUI(){
     <div class="section-title" id="vendors-title">Vendors</div>
     <div id="list"></div>
     <div class="section-title" id="queue-title">Review queue</div><div id="queue"></div>
+    <div class="section-title" id="untracked-title">In Procore, not tracked in Billy</div><div id="untracked"></div>
     <div class="section-title" id="valid-title">Action items — site types, new-sub checks &amp; docs to add to Billy</div><div id="valid"></div>
     <div class="exportbar" id="exportbar"><button id="recbtn" class="recbtn" title="Download an Excel (.xlsx) of ALL records in view — every vendor with contract dates, compliance status, and tags">⬇ Export Project Records</button><button id="exportbtn" title="Download an Excel (.xlsx) of subcontractors (name, contract amount, GC license # &amp; exp, COI expirations) for the current view">⬇ Export for State Inspector GCL Audit</button></div>
     </div>
@@ -503,10 +511,13 @@ function render(){
   const showList = !cm || CMGR_SUB==='vendors';   // Compliance Mgr: pick vendor list OR docs OR the review queue
   const showDocs = cm && CMGR_SUB==='docs';
   const showQueue = cm && CMGR_SUB==='queue';
+  const showUntracked = cm && CMGR_SUB==='untracked';
   sh('cmgr-subnav', cm);
   sh('queue-title', showQueue); sh('queue', showQueue);
+  sh('untracked-title', showUntracked); sh('untracked', showUntracked);
   if(showQueue) renderQueue();
-  if(showQueue){ const lg=document.querySelector('.legend'); if(lg) lg.style.display='none'; }
+  if(showUntracked) renderUntracked();
+  if(showQueue||showUntracked){ const lg=document.querySelector('.legend'); if(lg) lg.style.display='none'; }
   sh('projwrap', scope.showProj);           // project picker only in Operations
   sh('filtwrap', showList); sh('qwrap', showList);
   sh('cards', showList); sh('vendors-title', showList); sh('list', showList);
@@ -600,9 +611,95 @@ function renderReview(){
     +tbl('Project level',proj,true)
     +tbl('Directory level',dir,false);
 }
+/* ------------------- IN YOUR COURT TO SIGN (DocuSign) ----------------------
+   Envelopes where a BH signer has been reached in the routing order and has not
+   signed. Procore can say a commitment is "Out For Signature"; only DocuSign
+   knows whose turn it is, so this comes from signature_queue.json.
+
+   Each row carries what is needed to act without a second lookup: whether the
+   subcontractor has already signed (if so, nothing is being waited on but you),
+   the vendor's compliance status, and the contract value — because the GC
+   License requirement turns on $100k, so a small contract can be waived rather
+   than chased. */
+function renderSign(){
+  if(!SQ) return '';
+  const items=(SQ.items||[]);
+  const asof=SQ.generated_at?(' &middot; as of '+new Date(SQ.generated_at).toLocaleString()):'';
+  if(!items.length) return '<div class="gap-card"><h4>In your court to sign</h4><div class="empty">Nothing is waiting on your signature. ✅<span class="muted">'+asof+'</span></div></div>';
+  const dayPill=d=>d==null?'<span class="muted">—</span>':'<span class="pill '+(d>=14?'r':d>=7?'y':'g')+'">'+d+'</span>';
+  const chase=items.filter(x=>x.compliance_status&&!/^compliant$/i.test(x.compliance_status)).length;
+  let h='<div class="gap-card" style="margin-bottom:10px"><b>'+items.length+' envelope'+(items.length===1?'':'s')+' waiting on your signature</b>'
+    +(chase?(' <span class="pill r">'+chase+' also non-compliant</span>'):'')
+    +' <span class="muted">'+asof+'</span>'
+    +'<div class="muted" style="margin-top:6px;font-size:12px">Reached in the routing order and not yet signed. &ldquo;Sub signed&rdquo; means the subcontractor has finished &mdash; the contract is waiting only on our side.</div></div>';
+  h+='<div class="gap-card"><table class="lktable"><thead><tr>'
+    +'<th>Job</th><th>Vendor</th><th>Document</th><th>Sub signed</th><th>Days</th>'
+    +'<th>Compliance</th><th>Contract</th><th>Link</th></tr></thead><tbody>'
+    +items.map(x=>{
+      /* A weak match names the vendor but not the job. Listing the candidates is honest;
+         picking one of them would send the chase to the wrong project manager. */
+      const job = x.project
+        ? '<b>'+esc(x.project_number||'')+'</b> '+esc(x.project)
+        : ((x.candidate_projects&&x.candidate_projects.length)
+            ? '<span class="muted" title="Matched the vendor but not which of their jobs">one of: '
+              +x.candidate_projects.map(c=>esc(c.number)).join(', ')+'</span>'
+            : '<span class="muted">unknown</span>');
+      const comp = x.compliance_status
+        ? stPill(x.compliance_status)+(x.compliance_notes?(' <span class="muted" title="'+esc(x.compliance_notes)+'">ⓘ</span>'):'')
+        : '<span class="muted" title="Commitment not identified, so this vendor\'s status on this job is not known">—</span>';
+      const val = (x.contract_value!=null&&x.contract_value>0)
+        ? ('$'+Number(x.contract_value).toLocaleString()
+           +(x.gcl_waivable==='Yes'?' <span class="pill y" title="Subcontract under $100,000 — the GC License requirement can be waived rather than chased">GCL waivable</span>':''))
+        : '<span class="muted">—</span>';
+      const sub = x.counterparty_done===true ? '<span class="pill g" title="The subcontractor has signed; this is waiting only on us">yes</span>'
+                : x.counterparty_done===false ? '<span class="pill y" title="The subcontractor has not finished signing">not yet</span>'
+                : '<span class="muted">—</span>';
+      const after = (x.internal_after_me&&x.internal_after_me.length)
+        ? '<div class="muted" style="font-size:11px">then: '+x.internal_after_me.map(esc).join(', ')+'</div>' : '';
+      return '<tr><td>'+job+'</td><td><b>'+esc(x.vendor||'—')+'</b></td>'
+        +'<td style="white-space:normal">'+esc(x.subject||'—')+after+'</td>'
+        +'<td>'+sub+'</td><td>'+dayPill(x.days_waiting)+'</td>'
+        +'<td>'+comp+'</td><td>'+val+'</td>'
+        +'<td><a href="'+esc(x.url||'#')+'" target="_blank" rel="noopener">open</a></td></tr>';
+    }).join('')+'</tbody></table></div>';
+  return h;
+}
+
+/* ------------------ IN PROCORE, NOT TRACKED IN BILLY ----------------------
+   Billy is the source of every compliance row, so a commitment that exists in
+   Procore with no Billy contract behind it has no requirements, no expiry
+   tracking and no place in any total on this dashboard. The absence reads as
+   compliance, which is why it gets its own tab rather than a footnote. */
+function renderUntracked(){
+  const el=document.getElementById('untracked'); if(!el) return;
+  if(!UNTRACKED.length){
+    el.innerHTML='<div class="empty">Every Procore commitment has a Billy contract behind it. ✅ '
+      +'<span class="muted">(If compliance_data.json predates this check, the list will be absent rather than empty — re-run the compliance pull.)</span></div>';
+    return;
+  }
+  const rows=UNTRACKED.slice().sort((a,b)=>(b.contract_value||0)-(a.contract_value||0));
+  const total=rows.reduce((t,r)=>t+(r.contract_value||0),0);
+  const byType=rows.reduce((a,r)=>{a[r.type]=(a[r.type]||0)+1;return a;},{});
+  const big=rows.filter(r=>(r.contract_value||0)>=100000).length;
+  el.innerHTML='<div class="gap-card" style="margin-bottom:10px">'
+    +'<b>'+rows.length+' commitment'+(rows.length===1?'':'s')+' in Procore with no Billy contract</b> '
+    +'<span class="muted">$'+Math.round(total).toLocaleString()+' total &middot; '
+    +Object.entries(byType).map(([k,v])=>esc(k)+' '+v).join(', ')+'</span>'
+    +(big?(' <span class="pill r">'+big+' at or above $100,000</span>'):'')
+    +'<div class="muted" style="margin-top:6px;font-size:12px">These carry no COI requirements and no expiry tracking, and they appear in no total on this dashboard &mdash; the gap looks like compliance. Add the contract in Billy, or confirm it genuinely needs no coverage.</div></div>'
+    +'<div class="gap-card"><table class="lktable"><thead><tr>'
+    +'<th>Project</th><th>Commitment</th><th>Type</th><th>Vendor</th><th>Contract</th><th>Procore status</th></tr></thead><tbody>'
+    +rows.map(r=>'<tr'+((r.contract_value||0)>=100000?' class="warn"':'')+'>'
+      +'<td><b>'+esc(r.project_number||'')+'</b> '+esc(r.project||'')+'</td>'
+      +'<td>'+esc(r.commitment||'—')+'</td><td>'+esc(r.type||'')+'</td>'
+      +'<td>'+esc(r.vendor||'')+'</td>'
+      +'<td>'+(r.contract_value?('$'+Math.round(r.contract_value).toLocaleString()):'<span class="muted">—</span>')+'</td>'
+      +'<td>'+esc(r.commitment_status||'—')+(r.commitment_executed==='No'?' <span class="pill y">not executed</span>':'')+'</td>'
+    +'</tr>').join('')+'</tbody></table></div>';
+}
 function renderQueue(){
   const el=document.getElementById('queue'); if(!el) return;
-  const reviewHtml=renderReview();
+  const reviewHtml=renderReview()+renderSign();
   if(!STATE){
     el.innerHTML=reviewHtml+'<div class="gap-card"><h4>No movement for 3+ business days</h4><div class="empty">No stall data yet. <b>compliance_state.json</b> is written by <b>compliance_pull.js</b> alongside compliance_data.json &mdash; deploy the updated pull and this fills in once it has a few runs behind it.</div></div>';
     return;
