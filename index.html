@@ -411,11 +411,26 @@ function render(){
        approved. An open envelope against an executed commitment is noted, not obeyed. */
     const pd=procoreExecDate(r);
     if(pd || r.commitment_executed==='Yes'){
-      const still = x ? ' <span class="muted" title="'+esc(x.subject||'')+'">(an envelope is still open in DocuSign against this commitment — likely a change order or a re-send)</span>' : '';
-      return '<div class="vsig done">&#10003; <b>Executed</b> '
-        +(pd?('&mdash; '+fmtDate(pd)+' <span class="muted">(Procore)</span>')
-            :'<span class="muted">(Procore; no execution date recorded)</span>')
-        +staleFlag(r)+still+'</div>';
+      const still = x ? ' <span class="pill y" title="An envelope is still open in DocuSign against this commitment, which is executed — likely a change order or a re-send. Envelope: '+esc(x.subject||'(no subject)')+'">envelope still open</span>' : '';
+      /* Procore knows THAT it was executed but often not WHEN - the date field is filled in
+         by hand and usually is not. DocuSign knows exactly when the last signature landed,
+         and that envelope is already in the file we fetched, so the date is free: no extra
+         call, nothing added to the sync. Procore still decides whether it is executed;
+         DocuSign only supplies the date, and the label says which system each part is from. */
+      const de = pd ? null : execFor(r);
+      /* The date is the useful part; WHICH system it came from is not worth the width.
+         Provenance moves to the tooltip. The only case that still needs words on screen
+         is having no date at all, where silence would read as "not executed yet". */
+      const when = pd ? ('&mdash; '+fmtDate(pd))
+        : (de && de.completed_at)
+          ? ('&mdash; '+fmtDate(de.completed_at)
+             +' <a href="'+esc(de.url||'#')+'" target="_blank" rel="noopener">open</a>')
+          : ' <span class="muted">(no execution date in either system)</span>';
+      const src = pd ? 'Execution date from Procore'
+        : (de && de.completed_at) ? ('Signed in DocuSign '+fmtDate(de.completed_at)
+            +' — Procore recorded no execution date. Envelope: '+(de.subject||'(no subject)'))
+        : 'Procore says this commitment is executed but neither system holds a date';
+      return '<div class="vsig done" title="'+esc(src)+'">&#10003; <b>Executed</b> '+when+staleFlag(r)+still+'</div>';
     }
     if(!x){
       // 2. A completed DocuSign envelope, where Procore has not recorded execution.
