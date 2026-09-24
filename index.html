@@ -180,6 +180,7 @@ function setLocalLastReq(k,iso){ try{ localStorage.setItem('bh_lr_'+k, iso); }ca
 let ACTIVE_TAB='ops';  // ops | global | cmgr | acct
 let CMGR_SUB='vendors';  // Compliance Manager sub-view: queue | vendors | docs
 let STATE=null;          // compliance_state.json - per-row stall clock written by compliance_pull.js
+let RQ=null;             // review_queue.json - documents uploaded to Billy but not yet reviewed
 let LR_MAP={};  // shared last-requested map from the Worker (KV), keyed like reqKey()
 function effLastReq(r){ const k=reqKey(r); return [r.last_requested||'', localLastReq(k), LR_MAP[k]||''].sort().slice(-1)[0]; }  // newest wins (ISO sorts chronologically)
 let ROWS = [], GENERATED = '';
@@ -229,6 +230,13 @@ async function load(){
       const sr=await fetch('https://graph.microsoft.com/v1.0/drives/'+DRIVE_ID+'/root:/'+encodeURI('Compliance Dashboard/compliance_state.json')+':/content',{headers:{Authorization:'Bearer '+token}});
       if(sr.ok) STATE=await sr.json();
     }catch(e){ STATE=null; }
+    /* Billy has no needs_review endpoint - billy_review_pull.js reconstructs the queue
+       from documents that carry no reviewed_on date, at both the contract (project) and
+       vendor (directory) level, and writes it here. */
+    try{
+      const rr=await fetch('https://graph.microsoft.com/v1.0/drives/'+DRIVE_ID+'/root:/'+encodeURI('Compliance Dashboard/review_queue.json')+':/content',{headers:{Authorization:'Bearer '+token}});
+      if(rr.ok) RQ=await rr.json();
+    }catch(e){ RQ=null; }
     buildUI();
   }catch(e){
     const b=document.getElementById('banner'); b.style.display='block'; b.className='banner err';
@@ -281,7 +289,7 @@ function buildUI(){
     <div class="cards" id="cards"></div>
     <div class="section-title" id="vendors-title">Vendors</div>
     <div id="list"></div>
-    <div class="section-title" id="queue-title">Review queue &mdash; no movement for 3+ business days</div><div id="queue"></div>
+    <div class="section-title" id="queue-title">Review queue</div><div id="queue"></div>
     <div class="section-title" id="valid-title">Action items — site types, new-sub checks &amp; docs to add to Billy</div><div id="valid"></div>
     <div class="exportbar" id="exportbar"><button id="recbtn" class="recbtn" title="Download an Excel (.xlsx) of ALL records in view — every vendor with contract dates, compliance status, and tags">⬇ Export Project Records</button><button id="exportbtn" title="Download an Excel (.xlsx) of subcontractors (name, contract amount, GC license # &amp; exp, COI expirations) for the current view">⬇ Export for State Inspector GCL Audit</button></div>
     </div>
@@ -546,16 +554,63 @@ function queueRows(){
   out.sort((a,b)=>b.days-a.days||a.project.localeCompare(b.project)||a.vendor.localeCompare(b.vendor));
   return out;
 }
+/* ---------------------- AWAITING YOUR REVIEW -------------------------------
+   Documents sitting in Billy with no reviewed_on date - the same thing the
+   needs_attention/needs_review page shows, rebuilt from the documents endpoints
+   because Billy exposes no API for that view.
+
+   This is Tiffany's own work, not the PM team's, so it renders above the stalled
+   list and is deliberately NOT in the PM email: telling a project manager about a
+   certificate that is sitting in the compliance queue would be passing on a job
+   nobody outside this office can do. */
+function renderReview(){
+  if(!RQ) return '<div class="gap-card"><h4>Awaiting your review</h4><div class="empty">No review data yet. <b>review_queue.json</b> is written by <b>billy_review_pull.js</b> &mdash; add that workflow and this fills in on its next run.</div></div>';
+  const proj=(RQ.project||[]), dir=(RQ.directory||[]);
+  const st=RQ.stats||{};
+  const asof=RQ.generated_at?(' &middot; as of '+new Date(RQ.generated_at).toLocaleString()):'';
+  if(!proj.length&&!dir.length){
+    /* An empty queue and an unusable signal look identical on screen unless we say so. */
+    const suspicious=(st.documents_read>0 && !st.pending);
+    return '<div class="gap-card"><h4>Awaiting your review</h4><div class="empty">'
+      +(suspicious
+        ? 'Every document in Billy carries a reviewed date, so nothing reads as pending. If Billy&rsquo;s <b>Needs Review</b> page is showing items, then <code>reviewed_on</code> is not what drives it &mdash; worth checking before trusting this as empty.'
+        : 'Nothing waiting on your review. ✅')
+      +'<span class="muted">'+asof+'</span></div></div>';
+  }
+  const dayPill=d=>d==null?'<span class="muted">—</span>':'<span class="pill '+(d>=7?'r':d>=3?'y':'g')+'">'+d+'</span>';
+  /* withJob drives header AND cells together. Deriving it from the column count
+     is how the two drift apart and the table silently misaligns. */
+  const tbl=(title,list,withJob)=>{
+    if(!list.length) return '';
+    const cols=(withJob?['Project','Commitment']:[]).concat(['Vendor','Document','Days waiting','Link']);
+    return '<div class="gap-card"><h4>'+title+' <span class="nc-proj">('+list.length+')</span></h4>'
+      +'<table class="lktable"><thead><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'
+      +list.map(x=>'<tr>'
+        +(withJob?('<td>'+esc(x.project||'—')+'</td><td>'+esc(x.commitment||'—')+'</td>'):'')
+        +'<td><b>'+esc(x.vendor||'—')+'</b></td>'
+        +'<td style="white-space:normal">'+esc(x.document||'—')+'</td>'
+        +'<td>'+dayPill(x.days_waiting)+'</td>'
+        +'<td>'+(x.url?('<a href="'+esc(x.url)+'" target="_blank" rel="noopener">open in Billy</a>'):'<span class="muted">—</span>')+'</td>'
+      +'</tr>').join('')+'</tbody></table></div>';
+  };
+  return '<div class="gap-card" style="margin-bottom:10px"><b>'+(proj.length+dir.length)+' document'
+    +((proj.length+dir.length)===1?'':'s')+' awaiting your review</b>'
+    +' <span class="muted">'+proj.length+' on projects, '+dir.length+' in the directory'+asof+'</span>'
+    +'<div class="muted" style="margin-top:6px;font-size:12px">Uploaded to Billy with no review recorded. These are yours, not the PM team&rsquo;s &mdash; they are left out of the PM email.</div></div>'
+    +tbl('Project level',proj,true)
+    +tbl('Directory level',dir,false);
+}
 function renderQueue(){
   const el=document.getElementById('queue'); if(!el) return;
+  const reviewHtml=renderReview();
   if(!STATE){
-    el.innerHTML='<div class="empty">No stall data yet. <b>compliance_state.json</b> is written by <b>compliance_pull.js</b> alongside compliance_data.json &mdash; deploy the updated pull and this fills in once it has a few runs behind it.</div>';
+    el.innerHTML=reviewHtml+'<div class="gap-card"><h4>No movement for 3+ business days</h4><div class="empty">No stall data yet. <b>compliance_state.json</b> is written by <b>compliance_pull.js</b> alongside compliance_data.json &mdash; deploy the updated pull and this fills in once it has a few runs behind it.</div></div>';
     return;
   }
   const q=queueRows();
   const asof=STATE.generated_at?(' &middot; clock as of '+new Date(STATE.generated_at).toLocaleString()):'';
   if(!q.length){
-    el.innerHTML='<div class="empty">Nothing has been sitting unchanged for 3+ business days. ✅<span class="muted">'+asof+'</span></div>';
+    el.innerHTML=reviewHtml+'<div class="gap-card"><h4>No movement for 3+ business days</h4><div class="empty">Nothing has been sitting unchanged for 3+ business days. ✅<span class="muted">'+asof+'</span></div></div>';
     return;
   }
   /* Grouped by project because that is how the PM conversation happens - one PM owns
@@ -592,7 +647,7 @@ function renderQueue(){
       +'</tr>').join('')
       +'</tbody></table></div>';
   }
-  el.innerHTML=html;
+  el.innerHTML=reviewHtml+html;
   const btn=document.getElementById('qcopy');
   if(btn) btn.addEventListener('click',()=>copyQueueEmail(btn));
 }
