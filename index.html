@@ -178,7 +178,8 @@ function reqKey(r){ return (r.global_coi==='Yes') ? ('v:'+(r.vendor_id||'')) : (
 function localLastReq(k){ try{ return localStorage.getItem('bh_lr_'+k)||''; }catch(e){ return ''; } }
 function setLocalLastReq(k,iso){ try{ localStorage.setItem('bh_lr_'+k, iso); }catch(e){} }
 let ACTIVE_TAB='ops';  // ops | global | cmgr | acct
-let CMGR_SUB='vendors';  // Compliance Manager sub-view: vendors | docs
+let CMGR_SUB='vendors';  // Compliance Manager sub-view: queue | vendors | docs
+let STATE=null;          // compliance_state.json - per-row stall clock written by compliance_pull.js
 let LR_MAP={};  // shared last-requested map from the Worker (KV), keyed like reqKey()
 function effLastReq(r){ const k=reqKey(r); return [r.last_requested||'', localLastReq(k), LR_MAP[k]||''].sort().slice(-1)[0]; }  // newest wins (ISO sorts chronologically)
 let ROWS = [], GENERATED = '';
@@ -220,6 +221,14 @@ async function load(){
     ROWS = data.rows; GENERATED = data.generated_at || '';
     document.getElementById('asof').textContent = GENERATED ? ('data as of ' + new Date(GENERATED).toLocaleString()) : '';
     await loadLastReqMap(token);   // shared "last requested" (company-level not readable from Billy's API)
+    /* Stall clock. compliance_data.json says what is wrong today; it cannot say how long
+       it has been wrong. compliance_pull.js writes compliance_state.json beside it with,
+       per row, a digest of the fields that count as movement and the timestamp that state
+       was first seen. Best-effort: the queue shows an empty state if it is not there yet. */
+    try{
+      const sr=await fetch('https://graph.microsoft.com/v1.0/drives/'+DRIVE_ID+'/root:/'+encodeURI('Compliance Dashboard/compliance_state.json')+':/content',{headers:{Authorization:'Bearer '+token}});
+      if(sr.ok) STATE=await sr.json();
+    }catch(e){ STATE=null; }
     buildUI();
   }catch(e){
     const b=document.getElementById('banner'); b.style.display='block'; b.className='banner err';
@@ -238,6 +247,7 @@ function buildUI(){
     </div>
     <div id="tab-ops">
     <div id="cmgr-subnav" class="subnav" style="display:none">
+      <button class="subtab" data-sub="queue">Review queue</button>
       <button class="subtab active" data-sub="vendors">All Vendors</button>
       <button class="subtab" data-sub="docs">Action items &amp; docs</button>
     </div>
@@ -271,6 +281,7 @@ function buildUI(){
     <div class="cards" id="cards"></div>
     <div class="section-title" id="vendors-title">Vendors</div>
     <div id="list"></div>
+    <div class="section-title" id="queue-title">Review queue &mdash; no movement for 3+ business days</div><div id="queue"></div>
     <div class="section-title" id="valid-title">Action items — site types, new-sub checks &amp; docs to add to Billy</div><div id="valid"></div>
     <div class="exportbar" id="exportbar"><button id="recbtn" class="recbtn" title="Download an Excel (.xlsx) of ALL records in view — every vendor with contract dates, compliance status, and tags">⬇ Export Project Records</button><button id="exportbtn" title="Download an Excel (.xlsx) of subcontractors (name, contract amount, GC license # &amp; exp, COI expirations) for the current view">⬇ Export for State Inspector GCL Audit</button></div>
     </div>
@@ -481,14 +492,124 @@ function render(){
   const sh=(id,on)=>{ const el=document.getElementById(id); if(el) el.style.display = on?'':'none'; };
   const leg=document.querySelector('.legend'); if(leg) leg.style.display='';
   const cm = ACTIVE_TAB==='cmgr';
-  const showList = !cm || CMGR_SUB==='vendors';   // Compliance Mgr: pick vendor list OR the docs section
+  const showList = !cm || CMGR_SUB==='vendors';   // Compliance Mgr: pick vendor list OR docs OR the review queue
   const showDocs = cm && CMGR_SUB==='docs';
+  const showQueue = cm && CMGR_SUB==='queue';
   sh('cmgr-subnav', cm);
+  sh('queue-title', showQueue); sh('queue', showQueue);
+  if(showQueue) renderQueue();
+  if(showQueue){ const lg=document.querySelector('.legend'); if(lg) lg.style.display='none'; }
   sh('projwrap', scope.showProj);           // project picker only in Operations
   sh('filtwrap', showList); sh('qwrap', showList);
   sh('cards', showList); sh('vendors-title', showList); sh('list', showList);
   sh('valid-title', showDocs); sh('valid', showDocs);
   sh('exportbar', showList);
+}
+const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* =============================== REVIEW QUEUE ===============================
+   What is sitting on Tiffany's desk, longest-stalled first.
+
+   A row qualifies when compliance_pull.js flagged it: status Non-Compliant or
+   Unverified AND nothing about it has changed for 3+ BUSINESS days. Expiring Soon
+   is deliberately excluded - the vendor still has valid coverage, and escalating
+   dates-on-a-calendar to the PM team teaches them to skim the list. Those rows
+   stay visible under All Vendors.
+
+   The clock starts the day compliance_pull.js first runs with stall tracking;
+   nothing before that can be reconstructed, so early days will look quiet. */
+function queueRows(){
+  const items=(STATE&&STATE.items)||{};
+  const byId={}, byPair={};
+  for(const r of ROWS){
+    if(r.billy_contract_id) byId[String(r.billy_contract_id)]=r;
+    byPair[(r.project_number||'')+'|'+(r.vendor_id||'')]=r;
+  }
+  const out=[];
+  for(const k of Object.keys(items)){
+    const it=items[k]; if(it.escalate!=='Yes') continue;
+    const row=byId[k]||byPair[k]||null;
+    out.push({ key:k, days:Number(it.bizdays_unchanged||0), state:it, row:row,
+               project:(row&&row.project)||it.project||'', vendor:(row&&row.vendor)||it.vendor||'',
+               status:(row&&row.status)||it.status||'', notes:(row&&row.notes)||'',
+               commitment:(row&&row.commitment)||it.commitment||'',
+               email:(row&&row.vendor_email)||it.vendor_email||'',
+               orphan:!row });
+  }
+  out.sort((a,b)=>b.days-a.days||a.project.localeCompare(b.project)||a.vendor.localeCompare(b.vendor));
+  return out;
+}
+function renderQueue(){
+  const el=document.getElementById('queue'); if(!el) return;
+  if(!STATE){
+    el.innerHTML='<div class="empty">No stall data yet. <b>compliance_state.json</b> is written by <b>compliance_pull.js</b> alongside compliance_data.json &mdash; deploy the updated pull and this fills in once it has a few runs behind it.</div>';
+    return;
+  }
+  const q=queueRows();
+  const asof=STATE.generated_at?(' &middot; clock as of '+new Date(STATE.generated_at).toLocaleString()):'';
+  if(!q.length){
+    el.innerHTML='<div class="empty">Nothing has been sitting unchanged for 3+ business days. ✅<span class="muted">'+asof+'</span></div>';
+    return;
+  }
+  /* Grouped by project because that is how the PM conversation happens - one PM owns
+     a job, not a vendor. Within a project the longest-stalled row comes first. */
+  const byProj={};
+  for(const x of q){ (byProj[x.project||'(no project)']=byProj[x.project||'(no project)']||[]).push(x); }
+  const projects=Object.keys(byProj).sort((a,b)=>
+    Math.max(...byProj[b].map(x=>x.days))-Math.max(...byProj[a].map(x=>x.days))||a.localeCompare(b));
+  const dayPill=d=>'<span class="pill '+(d>=10?'r':'y')+'">'+d+'</span>';
+  let html='<div class="gap-card" style="margin-bottom:10px">'
+    +'<b>'+q.length+' item'+(q.length===1?'':'s')+' with no movement for 3+ business days</b>'
+    +' <span class="muted">across '+projects.length+' project'+(projects.length===1?'':'s')+asof+'</span>'
+    +' <button id="qcopy" class="recbtn" style="margin-left:10px">&#128203; Copy PM email</button>'
+    +'<div class="muted" style="margin-top:6px;font-size:12px">Non-compliant and unverified only. Expiring Soon is not escalated &mdash; those vendors still have valid coverage; find them under All Vendors.</div></div>';
+  for(const p of projects){
+    const rows=byProj[p];
+    html+='<div class="gap-card"><h4>'+esc(p)+' <span class="nc-proj">('+rows.length+')</span></h4>'
+      +'<table class="lktable"><thead><tr>'
+      +'<th>Vendor</th><th>Commitment</th><th>Status</th>'
+      +'<th style="white-space:normal">What is outstanding</th><th>Biz days</th><th>Last requested</th>'
+      +'</tr></thead><tbody>'
+      +rows.map(x=>'<tr>'
+        +'<td><b>'+esc(x.vendor)+'</b>'+(x.orphan?' <span class="pill y" title="In the stall file but not in today\'s dataset - the commitment may have closed since the last pull.">stale</span>':'')+'</td>'
+        +'<td>'+esc(x.commitment||'—')+'</td>'
+        +'<td>'+stPill(x.status||'')+'</td>'
+        +'<td style="white-space:normal">'+esc(x.notes||'—')+'</td>'
+        +'<td>'+dayPill(x.days)+'</td>'
+        +'<td>'+esc((x.state.last_requested||'').slice(0,10)||'never')+'</td>'
+      +'</tr>').join('')
+      +'</tbody></table></div>';
+  }
+  el.innerHTML=html;
+  const btn=document.getElementById('qcopy');
+  if(btn) btn.addEventListener('click',()=>copyQueueEmail(btn));
+}
+/* A plain-text draft for the PM team. Deliberately factual and short: this list is
+   read weekly, and a chasing tone is what gets a recurring email filtered. The
+   Monday scheduled task writes the richer version that has also read Outlook. */
+function queueEmailText(){
+  const q=queueRows(); if(!q.length) return '';
+  const byProj={}; for(const x of q){ (byProj[x.project||'(no project)']=byProj[x.project||'(no project)']||[]).push(x); }
+  const projects=Object.keys(byProj).sort();
+  let t='Subject: Outstanding subcontractor compliance — '+new Date().toLocaleDateString()+'\n\n';
+  t+='The items below have had no movement in Billy for three or more business days. Each one is blocking on-site access and payment for that vendor.\n\n';
+  for(const p of projects){
+    t+=p+'\n';
+    for(const x of byProj[p].sort((a,b)=>b.days-a.days)){
+      t+='  - '+x.vendor+(x.commitment?(' ('+x.commitment+')'):'')+' — '+x.status
+        +(x.notes?('; '+x.notes):'')+' — '+x.days+' business days unchanged\n';
+    }
+    t+='\n';
+  }
+  t+='If any of these are waiting on a waiver decision or the commitment has not been approved or executed yet, let me know and I will note it.\n';
+  return t;
+}
+function copyQueueEmail(btn){
+  const t=queueEmailText(); if(!t) return;
+  const done=ok=>{ const o=btn.textContent; btn.textContent=ok?'Copied ✓':'Copy failed'; setTimeout(()=>{btn.textContent=o;},1600); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(()=>done(true),()=>done(false)); return; }
+  const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select();
+  let ok=false; try{ ok=document.execCommand('copy'); }catch(e){}
+  ta.remove(); done(ok);
 }
 function switchTab(name, sub){
   ACTIVE_TAB=name;
