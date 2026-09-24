@@ -359,7 +359,22 @@ function render(){
   const docsNeeded = r => r.w9_on_file==='No' || r.gcl_missing_billy==='Yes' || covBad(r);
   const c={ok:0,soon:0,bad:0,docs:0};
   rows.forEach(r=>{const s=r.status; if(s==='Compliant')c.ok++;else if(s==='Expiring Soon')c.soon++;else if(s==='Non-Compliant')c.bad++; if(docsNeeded(r))c.docs++;});
-  const isOutForSig = r => !!sigFor(r);
+  /* Procore is authoritative on WHETHER a commitment is out for signature or executed —
+     it is keyed to the commitment and needs no matching. DocuSign adds only the part
+     Procore does not have: whose turn it is. So the state comes from Procore and the
+     names come from DocuSign when an envelope can be tied to the same commitment. */
+  /* A change order is NOT the contract. It carries the commitment number it amends, so
+     it matches a commitment by number and would otherwise render on the vendor's card as
+     though the subcontract itself were out for signature. This dashboard is a commitment
+     view: change orders are excluded here and belong on a change-management dashboard.
+     doc_type comes from the pull; the subject test is a backstop for anything it missed. */
+  const CO_SUBJ = /change\s*(order|event)|\b(pco|ico|cco|cor|oco)\s*#?\s*\d|\bc\.\s*o\.\s*#?\s*\d|\bco\s*#\s*\d|\bco\s*(?:no\.?|number)\s*\d|\bce\s*#?\s*\d/i, CO_CAPS = /\bCO\s*#?\s*\d{1,3}\b(?!\d)/;
+  const isCO = x => /change\s*order/i.test(x.doc_type||'')
+    || CO_SUBJ.test(x.subject||'') || CO_CAPS.test(x.subject||'');
+  const procoreOut = r => /out for signature/i.test(r.commitment_status||'');
+  const procoreExecDate = r => String(r.commitment_execution_date||'').trim();
+  const isOutForSig = r => !(r.commitment_executed==='Yes' || String(r.commitment_execution_date||'').trim())
+                            && (procoreOut(r) || !!sigFor(r));
   /* The envelope out for signature against THIS commitment, if there is one.
      Matched on the commitment number only — the compliance dashboard is a commitment
      view, so an envelope that cannot be tied to an open commitment (a change order, or
@@ -369,7 +384,7 @@ function render(){
     if(!SQ || !Array.isArray(SQ.all)) return null;
     const c=String(r.commitment||'').trim();
     if(!c) return null;
-    return SQ.all.find(x=>x.with_side!=='nobody' && String(x.commitment||'').trim()===c) || null;
+    return SQ.all.find(x=>x.with_side!=='nobody' && !isCO(x) && String(x.commitment||'').trim()===c) || null;
   };
   /* Executed, and when. The counterpart to "out for signature": between them every
      commitment DocuSign knows about can say where it stands. In flight wins if both
@@ -377,17 +392,41 @@ function render(){
   const execFor = r => {
     if(!SQ || !Array.isArray(SQ.executed)) return null;
     const c=String(r.commitment||'').trim(); if(!c) return null;
-    return SQ.executed.find(x=>String(x.commitment||'').trim()===c) || null;
+    return SQ.executed.find(x=>!isCO(x) && String(x.commitment||'').trim()===c) || null;
   };
   const fmtDate = d => { if(!d) return ''; const t=new Date(d+'T00:00:00');
     return isNaN(t)?esc(d):t.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}); };
+  /* Precedence. Procore's STATUS is moved by hand — a PM who forgets to drag a
+     commitment from "Out For Signature" to "Approved" leaves a stale label behind.
+     `executed` is not hand-set: it can only become true after the commitment is
+     approved, so it is the reliable signal and it outranks the status. Where the two
+     disagree, the contract is executed and the status is what needs fixing. */
+  const isExecuted = r => r.commitment_executed==='Yes' || !!procoreExecDate(r);
+  const stalePill = src => ' <span class="pill y" title="'+src+' but the Procore status is still Out For Signature — move it to Approved">status not updated</span>';
+  const staleFlag = r => (isExecuted(r) && procoreOut(r)) ? stalePill('Executed in Procore') : '';
   const sigLine = r => {
     const x=sigFor(r);
+    /* 1. Executed in Procore. This outranks BOTH the hand-moved status and any envelope
+       still showing as open, because `executed` cannot be set before the commitment is
+       approved. An open envelope against an executed commitment is noted, not obeyed. */
+    const pd=procoreExecDate(r);
+    if(pd || r.commitment_executed==='Yes'){
+      const still = x ? ' <span class="muted" title="'+esc(x.subject||'')+'">(an envelope is still open in DocuSign against this commitment — likely a change order or a re-send)</span>' : '';
+      return '<div class="vsig done">&#10003; <b>Executed</b> '
+        +(pd?('&mdash; '+fmtDate(pd)+' <span class="muted">(Procore)</span>')
+            :'<span class="muted">(Procore; no execution date recorded)</span>')
+        +staleFlag(r)+still+'</div>';
+    }
     if(!x){
+      // 2. A completed DocuSign envelope, where Procore has not recorded execution.
       const e=execFor(r);
       if(e) return '<div class="vsig done" title="'+esc(e.subject||'')+'">'
         +'&#10003; <b>Executed via DocuSign</b>'+(e.completed_at?(' &mdash; '+fmtDate(e.completed_at)):'')
-        +' <a href="'+esc(e.url||'#')+'" target="_blank" rel="noopener">open</a></div>';
+        +' <a href="'+esc(e.url||'#')+'" target="_blank" rel="noopener">open</a>'
+        +(procoreOut(r)?stalePill('Completed in DocuSign'):'')+'</div>';
+      // 3. Not executed anywhere: the status is all we have.
+      if(procoreOut(r)) return '<div class="vsig">&#9998; <b>Out for signature</b> '
+        +'<span class="muted">(Procore; no DocuSign envelope matched, so no signer name)</span></div>';
       return '';
     }
     const who=x.with_names&&x.with_names.length?x.with_names.map(esc).join(', '):'';
@@ -718,15 +757,26 @@ function renderSign(){
     +'No signature data yet. <b>signature_queue.json</b> is written by <b>docusign_pull.js</b>, '
     +'and that workflow writes nothing while <b>dry_run</b> is set to 1 — clear it and re-run, '
     +'then reload this page.</div></div>';
-  const items=(SQ.items||[]);
+  /* Commitments only. A change order waiting on a signature is real work, but it is
+     change management, not compliance - and mixing the two makes the queue read as though
+     a subcontract were unsigned when only its CO is. They are counted, not hidden, so the
+     number is not silently lost before the change-management dashboard exists. */
+  const isCOitem = x => /change\s*order/i.test(x.doc_type||'')
+    || /change\s*(order|event)|\b(pco|ico|cco|cor|oco)\s*#?\s*\d|\bc\.\s*o\.\s*#?\s*\d|\bco\s*#\s*\d|\bco\s*(?:no\.?|number)\s*\d|\bce\s*#?\s*\d/i.test(x.subject||'') || /\bCO\s*#?\s*\d{1,3}\b(?!\d)/.test(x.subject||'');
+  const allItems=(SQ.items||[]);
+  const items=allItems.filter(x=>!isCOitem(x));
+  const coN=allItems.length-items.length;
+  const coNote=coN?('<div class="muted" style="margin-top:6px;font-size:12px">'+coN+' change order'+(coN===1?'':'s')
+    +' waiting on you '+(coN===1?'is':'are')+' not listed here \u2014 this is a commitment view. '
+    +'They belong on the change-management dashboard.</div>'):'';
   const asof=SQ.generated_at?(' &middot; as of '+new Date(SQ.generated_at).toLocaleString()):'';
-  if(!items.length) return '<div class="gap-card"><h4>In your court to sign</h4><div class="empty">Nothing is waiting on your signature. ✅<span class="muted">'+asof+'</span></div></div>';
+  if(!items.length) return '<div class="gap-card"><h4>In your court to sign</h4><div class="empty">No <b>commitment</b> is waiting on your signature. ✅<span class="muted">'+asof+'</span>'+coNote+'</div></div>';
   const dayPill=d=>d==null?'<span class="muted">—</span>':'<span class="pill '+(d>=14?'r':d>=7?'y':'g')+'">'+d+'</span>';
   const chase=items.filter(x=>x.compliance_status&&!/^compliant$/i.test(x.compliance_status)).length;
-  let h='<div class="gap-card" style="margin-bottom:10px"><b>'+items.length+' envelope'+(items.length===1?'':'s')+' waiting on your signature</b>'
+  let h='<div class="gap-card" style="margin-bottom:10px"><b>'+items.length+' commitment'+(items.length===1?'':'s')+' waiting on your signature</b>'
     +(chase?(' <span class="pill r">'+chase+' also non-compliant</span>'):'')
     +' <span class="muted">'+asof+'</span>'
-    +'<div class="muted" style="margin-top:6px;font-size:12px">Reached in the routing order and not yet signed. &ldquo;Sub signed&rdquo; means the subcontractor has finished &mdash; the contract is waiting only on our side.</div></div>';
+    +'<div class="muted" style="margin-top:6px;font-size:12px">Reached in the routing order and not yet signed. &ldquo;Sub signed&rdquo; means the subcontractor has finished &mdash; the contract is waiting only on our side.</div>'+coNote+'</div>';
   h+='<div class="gap-card"><table class="lktable"><thead><tr>'
     +'<th>Job</th><th>Vendor</th><th>Document</th><th>Sub signed</th><th>Days</th>'
     +'<th>Compliance</th><th>Contract</th><th>Link</th></tr></thead><tbody>'
