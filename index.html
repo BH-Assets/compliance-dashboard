@@ -183,6 +183,8 @@ let STATE=null;          // compliance_state.json - per-row stall clock written 
 let RQ=null;             // review_queue.json - documents uploaded to Billy but not yet reviewed
 let SQ=null;             // signature_queue.json - DocuSign envelopes waiting on her signature
 let UNTRACKED=[];        // Procore commitments with no Billy contract behind them
+let BILLY_INACTIVE=[];   // ...that DO have a Billy contract, closed as inactive
+let SELF_PERFORM=[];     // ...that are our own divisions
 let LR_MAP={};  // shared last-requested map from the Worker (KV), keyed like reqKey()
 function effLastReq(r){ const k=reqKey(r); return [r.last_requested||'', localLastReq(k), LR_MAP[k]||''].sort().slice(-1)[0]; }  // newest wins (ISO sorts chronologically)
 let ROWS = [], GENERATED = '';
@@ -222,6 +224,7 @@ async function load(){
     const data = await res.json();
     if (!data || !Array.isArray(data.rows)) throw new Error('Unexpected data shape');
     ROWS = data.rows; GENERATED = data.generated_at || ''; UNTRACKED = data.untracked || [];
+    BILLY_INACTIVE = data.billy_inactive || []; SELF_PERFORM = data.self_perform || [];
     document.getElementById('asof').textContent = GENERATED ? ('data as of ' + new Date(GENERATED).toLocaleString()) : '';
     await loadLastReqMap(token);   // shared "last requested" (company-level not readable from Billy's API)
     /* Stall clock. compliance_data.json says what is wrong today; it cannot say how long
@@ -678,8 +681,9 @@ function renderSign(){
 function renderUntracked(){
   const el=document.getElementById('untracked'); if(!el) return;
   if(!UNTRACKED.length){
-    el.innerHTML='<div class="empty">Every Procore commitment has a Billy contract behind it. ✅ '
-      +'<span class="muted">(If compliance_data.json predates this check, the list will be absent rather than empty — re-run the compliance pull.)</span></div>';
+    el.innerHTML='<div class="empty">No Procore commitment is missing a Billy contract. ✅ '
+      +'<span class="muted">(If compliance_data.json predates this check, the list will be absent rather than empty — re-run the compliance pull.)</span></div>'
+      +inactiveHtml()+selfPerformHtml();
     return;
   }
   const rows=UNTRACKED.slice().sort((a,b)=>(b.contract_value||0)-(a.contract_value||0));
@@ -700,7 +704,33 @@ function renderUntracked(){
       +'<td>'+esc(r.vendor||'')+'</td>'
       +'<td>'+(r.contract_value?('$'+Math.round(r.contract_value).toLocaleString()):'<span class="muted">—</span>')+'</td>'
       +'<td>'+esc(r.commitment_status||'—')+(r.commitment_executed==='No'?' <span class="pill y">not executed</span>':'')+'</td>'
+    +'</tr>').join('')+'</tbody></table></div>'+inactiveHtml()+selfPerformHtml();
+}
+/* In Billy but closed. Not a gap — the record exists and someone decided the sub was
+   done. Shown so the tab tells the whole story, and because the combination "Procore
+   still Approved and executed, Billy contract closed" is worth a second look: either the
+   job really has wound down, or a sub is on site with nobody tracking their coverage. */
+function inactiveHtml(){
+  if(!BILLY_INACTIVE.length) return '';
+  const live=BILLY_INACTIVE.filter(r=>/approv/i.test(r.commitment_status||'')&&r.commitment_executed!=='No');
+  return '<div class="gap-card" style="margin-top:14px"><h4>In Billy, marked inactive '
+    +'<span class="nc-proj">('+BILLY_INACTIVE.length+')</span></h4>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:8px">Contract exists in Billy and was closed &mdash; job winding down, in warranty, or the sub is not returning to site. Not a tracking gap.'
+    +(live.length?(' <b>'+live.length+'</b> of these are still Approved and executed in Procore &mdash; worth confirming the sub is genuinely off site.'):'')+'</div>'
+    +'<table class="lktable"><thead><tr><th>Project</th><th>Commitment</th><th>Vendor</th><th>Contract</th><th>Procore status</th></tr></thead><tbody>'
+    +BILLY_INACTIVE.map(r=>'<tr'+(/approv/i.test(r.commitment_status||'')&&r.commitment_executed!=='No'?' class="warn"':'')+'>'
+      +'<td><b>'+esc(r.project_number||'')+'</b> '+esc(r.project||'')+'</td>'
+      +'<td>'+esc(r.commitment||'—')+'</td><td>'+esc(r.vendor||'')+'</td>'
+      +'<td>'+(r.contract_value?('$'+Math.round(r.contract_value).toLocaleString()):'<span class="muted">—</span>')+'</td>'
+      +'<td>'+esc(r.commitment_status||'—')+(r.commitment_executed==='No'?' <span class="pill y">not executed</span>':'')+'</td>'
     +'</tr>').join('')+'</tbody></table></div>';
+}
+function selfPerformHtml(){
+  if(!SELF_PERFORM.length) return '';
+  const tot=SELF_PERFORM.reduce((t,r)=>t+(r.contract_value||0),0);
+  return '<div class="gap-card" style="margin-top:14px"><h4>Self-perform '
+    +'<span class="nc-proj">('+SELF_PERFORM.length+' &middot; $'+Math.round(tot).toLocaleString()+')</span></h4>'
+    +'<div class="muted" style="font-size:12px">Our own divisions. No Billy contract is expected and none is missing &mdash; listed only so the counts above reconcile against Procore.</div></div>';
 }
 function renderQueue(){
   const el=document.getElementById('queue'); if(!el) return;
