@@ -932,6 +932,12 @@ function renderLookupResults(results){
     return false;
   };
   const expCell=(r,k,exp,days)=>{
+    /* The pull is authoritative about what applies. applyDeliveryRule writes the literal
+       'n/a' into the *_days columns for third-party-delivery suppliers — no on-site
+       presence, so only GL can apply — and that rule is richer than anything this page
+       can re-derive. Read it first; the local check below only covers cases the pull
+       leaves to the reader (warranty, professional, GC licence). */
+    if(days==='n/a')            return '<span class="muted" title="Does not apply to this vendor/contract">n/a</span>';
     if(notApplicable(r,k))      return '<span class="muted" title="Not required for this vendor/contract">n/a</span>';
     if(days==='waived')         return '<span class="muted" title="Waived in Billy">waived</span>';
     if(exp)                     return exp;
@@ -957,6 +963,7 @@ function exportLookup(){
   /* Same meanings as on screen, as plain text — a spreadsheet that reads blank where the
      page reads "waived" is how the two get quoted against each other in a payment dispute. */
   const expTxt=(r,k,exp,days)=>{
+    if(days==='n/a') return 'n/a';   // set by applyDeliveryRule in the pull — authoritative
     const isW=(r.project_status||'').toLowerCase()==='warranty', isProf=r.vendor_type==='Professional';
     const na = k==='gcl' ? r.gcl_required!=='Yes'
              : k==='prof' ? !(r.prof_required==='Yes' && (!isW||isProf))
