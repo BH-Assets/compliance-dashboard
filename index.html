@@ -691,7 +691,49 @@ function render(){
   } else {
     listHtml=view.map(r=>vcard(r, isGlobalView)).join('');
   }
-  document.getElementById('list').innerHTML = listHtml;
+  /* ---- STATUS NEEDS FIXING IN PROCORE (shown under the Out-for-Signature filter) ----
+     A commitment Procore marks executed cannot still be awaiting signature: `executed`
+     is only reachable after approval, while the status label is dragged by hand. These
+     rows are deliberately ABSENT from the count above - they are not really out for
+     signature - so without this panel the mismatch is invisible precisely because the
+     dashboard got it right. Everything here is already on the row; no extra API calls. */
+  let fixHtml='';
+  if(filt==='outsig'){
+    const draftish = r => /draft|out for bid/i.test(r.commitment_status||'');
+    const stale=rows.filter(r=>isExecuted(r) && (procoreOut(r)||draftish(r)))
+      .sort((a,b)=>(b.contract_value||0)-(a.contract_value||0));
+    if(stale.length){
+      const seen=new Set();
+      const uniq=stale.filter(r=>{const k=String(r.commitment||'')+'|'+String(r.project_number||'');
+        if(seen.has(k))return false; seen.add(k); return true;});
+      fixHtml='<div class="gap-card" style="margin-top:14px">'
+        +'<b>'+uniq.length+' commitment'+(uniq.length===1?'':'s')+' executed in Procore but not relabelled</b>'
+        +'<div class="muted" style="margin-top:6px;font-size:12px">Procore says these are executed, '
+        +'which can only happen after approval &mdash; but the status still reads Out For Signature or Draft. '
+        +'They are <b>not</b> counted above, because they are not actually awaiting a signature. '
+        +'The contract is fine; the label needs dragging to Approved in Procore.</div>'
+        +'<table class="lktable" style="margin-top:8px"><thead><tr>'
+        +'<th>Job</th><th>Vendor</th><th>Commitment</th><th>Says</th><th>Executed</th><th>Contract</th>'
+        +'</tr></thead><tbody>'
+        +uniq.map(r=>{
+          const pid=r.procore_project_id, cid=r.procore_contract_id;
+          const cnum=esc(r.commitment||'—');
+          const cell=(pid&&cid)
+            ? '<a href="https://app.procore.com/webclients/host/companies/15326/projects/'+encodeURIComponent(pid)
+              +'/tools/contracts/commitments/work_order_contracts/'+encodeURIComponent(cid)
+              +'" target="_blank" rel="noopener" title="Open this commitment in Procore">'+cnum+'</a>'
+            : cnum;
+          const v=(r.contract_value!=null&&r.contract_value>0)
+            ? '$'+Number(r.contract_value).toLocaleString() : '<span class="muted">—</span>';
+          return '<tr><td><b>'+esc(r.project_number||'')+'</b> '+esc(r.project||'')+'</td>'
+            +'<td>'+esc(r.vendor||'')+'</td><td>'+cell+'</td>'
+            +'<td><span class="pill y">'+esc(r.commitment_status||'—')+'</span></td>'
+            +'<td>'+(procoreExecDate(r)?fmtDate(procoreExecDate(r)):'<span class="muted">yes, no date</span>')+'</td>'
+            +'<td>'+v+'</td></tr>';
+        }).join('')+'</tbody></table></div>';
+    }
+  }
+  document.getElementById('list').innerHTML = listHtml + fixHtml;
   document.querySelectorAll('.reqbtn:not([disabled])').forEach(b=>b.onclick=()=>onRequestDocs(b));
   // Data validation — items to add to Billy
   const w9miss = rows.filter(r=>r.w9_on_file==='No');
