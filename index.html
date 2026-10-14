@@ -310,6 +310,27 @@ body.bh-page{background:#fff}
 .bh-page .banner{border-radius:0}
 .bh-page footer{border-top:1px solid var(--bh-hairline)}
 .bh-page .legend .grp{white-space:normal}
+/* warranty: yellow shading carries it; the shield marks continuing coverage, not a warning */
+.bh-page .wico{width:11px;height:11px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round;vertical-align:-1px;margin-right:4px}
+.bh-page .wtag{display:inline-flex;align-items:center}
+.bh-page .pchip .wico{margin-right:3px}
+/* global view: a summary line that opens into a short table */
+.bh-page details.vprojs2{margin:8px 0 4px;border:1px solid var(--bh-hairline);color:var(--bh-ink);background:#fff}
+.bh-page details.vprojs2 summary{display:flex;align-items:center;gap:12px;padding:8px 12px;cursor:pointer;list-style:none;font-size:12.5px}
+.bh-page details.vprojs2 summary::-webkit-details-marker{display:none}
+.bh-page details.vprojs2 .lbl{font-weight:700;color:var(--bh-ink)}
+.bh-page details.vprojs2 .wcount{display:inline-flex;align-items:center;background:#FFF7E9;color:#8a5a00;padding:2px 8px;font-size:11px;font-weight:700}
+.bh-page details.vprojs2 .show{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.bh-page details.vprojs2 .show::after{content:" \25B8"}
+.bh-page details.vprojs2[open] .show::after{content:" \25BE"}
+.bh-page details.vprojs2[open] .show{font-size:0}
+.bh-page details.vprojs2[open] .show::before{content:"Hide projects";font-size:11px}
+.bh-page .ptable{width:100%;border-top:1px solid var(--bh-hairline);font-size:12px}
+.bh-page .ptable th{position:static;background:#fafafa;color:var(--bh-ink-muted);font-size:10.5px;padding:6px 12px}
+.bh-page .ptable td{padding:6px 12px;text-align:left}
+.bh-page .ptable td.pn{font-weight:700}
+.bh-page .ptable .num{text-align:right}
+.bh-page .ptable tr.w td{background:#FFFBF2}
 @media (max-width:960px){.bh-page .wrap{padding:16px 20px 32px}.bh-page .bh-header>a.bh-btn-outline{display:none}}
 </style>
   <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.7.1/lib/msal-browser.min.js"></script>
@@ -821,11 +842,12 @@ function render(){
   const projChips = list => list.map(p=>{
     const tip = [p.project, p.commitment?('commitment '+p.commitment):'', p.value?('$'+p.value.toLocaleString()):'', p.warranty?'warranty period':'']
                   .filter(Boolean).join(' · ');
-    return '<span class="pchip'+(p.warranty?' w':'')+'" title="'+esc(tip)+'">'
+    return '<span class="pchip'+(p.warranty?' w':'')+'" title="'+esc(tip)+'">'+(p.warranty?'<svg class=\'wico\' viewBox=\'0 0 16 16\' aria-hidden=\'true\'><path d=\'M8 1.5l5 2v4c0 3.2-2.1 5.6-5 7-2.9-1.4-5-3.8-5-7v-4l5-2z\'/><path d=\'M5.6 8.2l1.7 1.7 3.2-3.4\'/></svg>':'')
       +'<span class="pn">'+esc(p.number||'—')+'</span>'+esc(p.project||'')
-      +(p.warranty?' ⚠':'')+'</span>';
+      +'</span>';
   }).join('');
 
+  const WSHIELD='<svg class=\'wico\' viewBox=\'0 0 16 16\' aria-hidden=\'true\'><path d=\'M8 1.5l5 2v4c0 3.2-2.1 5.6-5 7-2.9-1.4-5-3.8-5-7v-4l5-2z\'/><path d=\'M5.6 8.2l1.7 1.7 3.2-3.4\'/></svg>';
   const vcard = (r, globalView) => {
     const cls = r.status==='Compliant'?'g':(r.status==='Expiring Soon'?'y':'r');
     const alTag = r.gcl_on_alabama==='Yes'?'<span class="cpill g" style="font-size:9px">✓AL</span>':'';
@@ -842,14 +864,19 @@ function render(){
     return '<div class="vcard '+cls+'">'
       +'<div class="vhead">'+((()=>{ const vl=billyVendorLink(r); const nm=(r.vendor||''); return vl?'<a class="vname vlink" href="'+vl+'" target="_blank" rel="noopener" title="Open in Billy">'+nm+'</a>':'<span class="vname">'+nm+'</span>'; })())+'<span class="vtype">'+typeLabel(r)+'</span>'
       +(r.global_coi==='Yes'?'<span class="gtag" title="Global blanket COI: one COI on the company directory; project COI waived">Global COI</span>':'')
-      +((r.project_status||'').toLowerCase()==='warranty'?'<span class="wtag" title="Warranty period: GL Additional Insured for completed operations required (~2 yrs post-completion); subs may still submit pay apps">Warranty</span>':'')
+      +((r.project_status||'').toLowerCase()==='warranty'?'<span class="wtag" title="Warranty period: GL Additional Insured for completed operations required (~2 yrs post-completion); subs may still submit pay apps"><svg class="wico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l5 2v4c0 3.2-2.1 5.6-5 7-2.9-1.4-5-3.8-5-7v-4l5-2z"/><path d="M5.6 8.2l1.7 1.7 3.2-3.4"/></svg>Warranty</span>':'')
       +(r.contract_active==='No'?'<span class="itag" title="Contract is inactive in Billy (e.g., a closed/completed PO on a warranty job)">Inactive</span>':'')
       +'<span class="vright">On-Site/Pay '+okChip(r.on_site_ok)+' '+stPill(r.status)+'</span></div>'
-      +'<div class="vsub">'+(globalView ? 'Company directory &middot; Global blanket COI (applies to all projects)' : ((r.project||'')+' &middot; '+(r.project_number||'')+' &middot; '+(r.commitment||'')+' &middot; $'+Number(r.contract_value||0).toLocaleString()))+'</div>'
+      +'<div class="vsub">'+(globalView ? 'Global blanket COI on the company directory, covering every project' : ((r.project||'')+' &middot; '+(r.project_number||'')+' &middot; '+(r.commitment||'')+' &middot; $'+Number(r.contract_value||0).toLocaleString()))+'</div>'
       +(globalView ? (()=>{
           const ps=vendorProjects(r);
           if(!ps.length) return '<div class="vprojs"><span class="lbl">Current projects:</span> <span class="muted">none found in this pull &mdash; the blanket COI is on file but no active contract matched</span></div>';
-          return '<div class="vprojs"><span class="lbl">On '+ps.length+' current project'+(ps.length===1?'':'s')+':</span> '+projChips(ps)+'</div>';
+          const w=ps.filter(p=>p.warranty).length;
+          const rowsH=ps.map(p=>'<tr'+(p.warranty?' class="w"':'')+'><td class="pn">'+esc(p.number||'\u2014')+'</td><td>'+esc(p.project||'')
+            +(p.warranty?' <span class="wtag">'+WSHIELD+'Warranty</span>':'')+'</td><td>'+esc(p.commitment||'')+'</td><td class="num">'+(p.value?'$'+p.value.toLocaleString():'')+'</td></tr>').join('');
+          return '<details class="vprojs2"><summary><span class="lbl">On '+ps.length+' current project'+(ps.length===1?'':'s')+'</span>'
+            +(w?'<span class="wcount">'+WSHIELD+w+' in warranty</span>':'')+'<span class="show">Show projects</span></summary>'
+            +'<table class="ptable"><thead><tr><th class="l">Project #</th><th class="l">Project</th><th class="l">Commitment</th><th class="num">Contract</th></tr></thead><tbody>'+rowsH+'</tbody></table></details>';
         })() : '')
       +sigLine(r)
       +'<div class="vcov">'+cov+'</div>'
@@ -883,7 +910,7 @@ function render(){
     const groups={}; view.forEach(r=>{ const k=r.project||'(no project)'; (groups[k]=groups[k]||[]).push(r); });
     listHtml=Object.keys(groups).sort().map(pn=>{
       const g=groups[pn]; const num=g[0].project_number?(' &middot; '+g[0].project_number):'';
-      const wtag=(g[0].project_status||'').toLowerCase()==='warranty'?'<span class="wtag" title="Warranty period: GL Additional Insured for completed operations required (~2 yrs post-completion); subs may still submit pay apps">Warranty</span>':'';
+      const wtag=(g[0].project_status||'').toLowerCase()==='warranty'?'<span class="wtag" title="Warranty period: GL Additional Insured for completed operations required (~2 yrs post-completion); subs may still submit pay apps"><svg class="wico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l5 2v4c0 3.2-2.1 5.6-5 7-2.9-1.4-5-3.8-5-7v-4l5-2z"/><path d="M5.6 8.2l1.7 1.7 3.2-3.4"/></svg>Warranty</span>':'';
       return '<div class="projgrp">'+pn+' '+wtag+'<span class="cnt">'+num+' &middot; '+g.length+' vendor'+(g.length===1?'':'s')+'</span></div>'+g.map(r=>vcard(r,false)).join('');
     }).join('');
   } else {
