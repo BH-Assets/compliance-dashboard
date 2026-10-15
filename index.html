@@ -303,6 +303,12 @@ body.bh-page{background:#fff}
 .bh-page .pill,.bh-page .cpill,.bh-page .gtag,.bh-page .wtag,.bh-page .itag{border-radius:0;letter-spacing:.03em}
 .bh-page .pchip{border-radius:0}
 .bh-page .vsig{border-radius:0}
+/* subcontract status is not compliance status: brand neutrals, never green / yellow / red */
+.bh-page .vsig{background:#fff;border:1px solid var(--bh-slate);color:var(--bh-ink)}
+.bh-page .vsig.sub{background:#fff;border:1px dashed var(--bh-slate);color:var(--bh-ink)}
+.bh-page .vsig.done{background:var(--bh-light-gray);border-color:var(--bh-light-gray);color:var(--bh-ink)}
+.bh-page .vsig.appr{background:var(--bh-cream);border-color:var(--bh-cream);color:var(--bh-maroon)}
+.bh-page .vsig .muted{color:var(--bh-ink-muted)}
 /* tables */
 .bh-page table,.bh-page .lktable,.bh-page .tablescroll{border-radius:0;box-shadow:none}
 .bh-page th,.bh-page .lktable th{background:var(--bh-slate);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
@@ -725,6 +731,9 @@ function render(){
       // 3. Not executed anywhere: the status is all we have.
       if(procoreOut(r)) return '<div class="vsig">&#9998; <b>Out for signature</b> '
         +'<span class="muted" title="Procore holds no signature record for this commitment and no DocuSign envelope matched it">(no signer name)</span></div>';
+      /* 4. Approved in Procore but not executed and not out for signature (preview). */
+      if(/approved/i.test(r.commitment_status||'')) return '<div class="vsig appr" title="Procore status: '+esc(r.commitment_status||'')+'">'
+        +'<b>Approved, not executed</b> <span class="muted">&mdash; not out for signature yet</span></div>';
       return '';
     }
     const who=x.with_names&&x.with_names.length?x.with_names.map(esc).join(', '):'';
