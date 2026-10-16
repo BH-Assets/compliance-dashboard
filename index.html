@@ -553,7 +553,13 @@ function buildUI(){
   document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
   document.querySelectorAll('.subtab').forEach(b=>b.addEventListener('click',()=>{ CMGR_SUB=b.dataset.sub; document.querySelectorAll('.subtab').forEach(x=>x.classList.toggle('active',x.dataset.sub===CMGR_SUB)); render(); }));
   // compact multi-select project picker (Operations) — collapsed dropdown, defaults to ALL
-  { document.querySelectorAll('.projcb').forEach(c=>c.checked=true); }   // default: all projects
+  { /* default: all projects. ?job=<project number> (or ?project=<name>) opens filtered to that
+       project - the Project Information dashboard links here this way. &filt=nc etc. also works. */
+    const qs=new URLSearchParams(location.search); const want=String(qs.get('job')||qs.get('project')||'').trim().toLowerCase();
+    let names=null;
+    if(want){ names=new Set(ROWS.filter(r=>String(r.project_number||'').trim().toLowerCase()===want||String(r.project||'').trim().toLowerCase()===want).map(r=>r.project)); if(!names.size) names=null; }
+    document.querySelectorAll('.projcb').forEach(c=>c.checked=names?names.has(c.value):true);
+    const f=qs.get('filt'); const fe=document.getElementById('filt'); if(f&&fe&&[...fe.options].some(o=>o.value===f)) fe.value=f; }
   function updateProjBtn(){
     const cbs=[...document.querySelectorAll('.projcb')], on=cbs.filter(c=>c.checked);
     const btn=document.getElementById('projBtn'); if(!btn) return;
